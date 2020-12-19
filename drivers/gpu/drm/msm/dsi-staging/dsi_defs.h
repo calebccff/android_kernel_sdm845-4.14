@@ -403,6 +403,13 @@ struct dsi_panel_cmd_set {
 	u32 count;
 	u32 ctrl_idx;
 	struct dsi_cmd_desc *cmds;
+	struct dsi_cmd_desc *cmds1;
+	struct dsi_cmd_desc *cmds2;
+	struct dsi_cmd_desc *cmds3;
+	struct dsi_cmd_desc *cmds4;
+	struct dsi_cmd_desc *cmds5;
+	struct dsi_cmd_desc *cmds6;
+	struct dsi_cmd_desc *cmds7;
 };
 
 /**

@@ -2818,6 +2818,8 @@ int gsi_stop_channel(unsigned long chan_hdl)
 
 free_lock:
 	mutex_unlock(&gsi_ctx->mlock);
+	if (res == -GSI_STATUS_TIMED_OUT)
+		BUG();
 	return res;
 }
 EXPORT_SYMBOL(gsi_stop_channel);

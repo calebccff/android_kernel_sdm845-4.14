@@ -18,7 +18,6 @@
 #include <linux/firmware.h>
 #include <linux/delay.h>
 #include <linux/timer.h>
-#include <linux/iopoll.h>
 #include "cam_io_util.h"
 #include "cam_hw.h"
 #include "cam_hw_intf.h"
@@ -30,9 +29,6 @@
 #include "cam_icp_hw_mgr_intf.h"
 #include "cam_cpas_api.h"
 #include "cam_debug_util.h"
-#include "hfi_reg.h"
-
-#define HFI_MAX_POLL_TRY 5
 
 static int cam_ipe_caps_vote(struct cam_ipe_device_core_info *core_info,
 	struct cam_icp_cpas_vote *cpas_vote)
@@ -197,12 +193,9 @@ static int cam_ipe_handle_resume(struct cam_hw_info *ipe_dev)
 		CAM_CPAS_REG_CPASTOP, hw_info->pwr_ctrl,
 		true, &pwr_ctrl);
 	if (pwr_ctrl & IPE_COLLAPSE_MASK) {
-		CAM_DBG(CAM_ICP, "IPE pwr_ctrl set(%x)", pwr_ctrl);
-		cam_cpas_reg_write(core_info->cpas_handle,
-			CAM_CPAS_REG_CPASTOP,
-			hw_info->pwr_ctrl, true, 0);
+		CAM_ERR(CAM_ICP, "IPE: resume failed : %d", pwr_ctrl);
+		return -EINVAL;
 	}
-
 	rc = cam_ipe_transfer_gdsc_control(soc_info);
 	cam_cpas_reg_read(core_info->cpas_handle,
 		CAM_CPAS_REG_CPASTOP, hw_info->pwr_ctrl, true, &pwr_ctrl);
@@ -392,12 +385,7 @@ int cam_ipe_process_cmd(void *device_priv, uint32_t cmd_type,
 			cam_ipe_toggle_clk(soc_info, false);
 		core_info->clk_enable = false;
 		break;
-	case CAM_ICP_IPE_CMD_RESET:
-		rc = cam_ipe_cmd_reset(soc_info, core_info);
-		break;
 	default:
-		CAM_ERR(CAM_ICP, "Invalid Cmd Type:%u", cmd_type);
-		rc = -EINVAL;
 		break;
 	}
 	return rc;

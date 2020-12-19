@@ -23,6 +23,7 @@
 #include "dsi_display.h"
 #include "sde_crtc.h"
 #include "sde_rm.h"
+#include "sde_trace.h"
 
 #define BL_NODE_NAME_SIZE 32
 
@@ -147,7 +148,9 @@ static int sde_backlight_setup(struct sde_connector *c_conn,
 	display = (struct dsi_display *) c_conn->display;
 	bl_config = &display->panel->bl_config;
 	props.max_brightness = bl_config->brightness_max_level;
-	props.brightness = bl_config->brightness_max_level;
+	//props.brightness = bl_config->brightness_max_level;
+	props.brightness = bl_config->bl_def_val;
+	SDE_ERROR("props.brightness = %d\n", props.brightness);
 	snprintf(bl_node_name, BL_NODE_NAME_SIZE, "panel%u-backlight",
 							display_count);
 	c_conn->bl_device = backlight_device_register(bl_node_name, dev->dev,
@@ -518,6 +521,8 @@ static int _sde_connector_update_bl_scale(struct sde_connector *c_conn)
 	struct dsi_display *dsi_display;
 	struct dsi_backlight_config *bl_config;
 	int rc = 0;
+	/*xiaoxiaohuan@OnePlus.MultiMediaService, add for fingerprint*/
+	struct backlight_device *bd;
 
 	if (!c_conn) {
 		SDE_ERROR("Invalid params sde_connector null\n");
@@ -531,6 +536,14 @@ static int _sde_connector_update_bl_scale(struct sde_connector *c_conn)
 			((dsi_display) ? dsi_display->panel : NULL));
 		return -EINVAL;
 	}
+	/*xiaoxiaohuan@OnePlus.MultiMediaService, add for fingerprint*/
+		bd = c_conn->bl_device;
+		if (!bd) {
+			SDE_ERROR("Invalid params backlight_device null\n");
+			return -EINVAL;
+		}
+
+		mutex_lock(&bd->update_lock);
 
 	bl_config = &dsi_display->panel->bl_config;
 
@@ -663,7 +676,12 @@ int sde_connector_pre_kickoff(struct drm_connector *connector)
 		SDE_EVT32(connector->base.id, SDE_EVTLOG_ERROR);
 		goto end;
 	}
-
+/*xiaoxiaohuan@OnePlus.MultiMediaService,2018/08/04, add for fingerprint*/
+	rc = _sde_connector_update_hbm(c_conn);
+	if (rc) {
+		SDE_EVT32(connector->base.id, SDE_EVTLOG_ERROR);
+		goto end;
+	}
 	if (!c_conn->ops.pre_kickoff)
 		return 0;
 
@@ -2382,6 +2400,9 @@ struct drm_connector *sde_connector_init(struct drm_device *dev,
 		0x0, 0, MAX_AD_BL_SCALE_LEVEL, MAX_AD_BL_SCALE_LEVEL,
 		CONNECTOR_PROP_AD_BL_SCALE);
 
+//xiaoxiaohuan@OnePlus.MultiMediaService,2018/08/04, add for fingerprint
+	msm_property_install_range(&c_conn->property_info, "CONNECTOR_CUST",
+		0x0, 0, INT_MAX, 0, CONNECTOR_PROP_CUSTOM);
 	c_conn->bl_scale_dirty = false;
 	c_conn->bl_scale = MAX_BL_SCALE_LEVEL;
 	c_conn->bl_scale_ad = MAX_AD_BL_SCALE_LEVEL;

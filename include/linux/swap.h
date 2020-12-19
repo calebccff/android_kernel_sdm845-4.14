@@ -13,6 +13,8 @@
 #include <linux/atomic.h>
 #include <linux/page-flags.h>
 #include <asm/page.h>
+/* bin.zhong@ASTI add for CONFIG_SMART_BOOST */
+#include <oneplus/smartboost/smartboost_helper.h>
 
 struct notifier_block;
 
@@ -175,6 +177,11 @@ enum {
 					/* add others here before... */
 	SWP_SCANNING	= (1 << 12),	/* refcount in scan_swap_map */
 };
+
+#ifdef CONFIG_MEMPLUS
+#define SLOW_BDV 0
+#define FAST_BDV SWP_FAST
+#endif
 
 #define SWAP_CLUSTER_MAX 32UL
 #define COMPACT_CLUSTER_MAX SWAP_CLUSTER_MAX
@@ -369,6 +376,11 @@ extern int sysctl_swap_ratio;
 extern int sysctl_swap_ratio_enable;
 extern int remove_mapping(struct address_space *mapping, struct page *page);
 extern unsigned long vm_total_pages;
+
+#ifdef CONFIG_KSWAPD_LAZY_RECLAIM
+extern unsigned int vm_breath_period;
+extern int vm_breath_priority;
+#endif
 
 #ifdef CONFIG_NUMA
 extern int node_reclaim_mode;

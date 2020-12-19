@@ -1,4 +1,4 @@
-/* Copyright (c) 2017-2019, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2017, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -155,7 +155,7 @@ const char *cam_get_module_name(unsigned int module_id);
 
 /*
  * CAM_ERR_RATE_LIMIT
- * @brief    :  This Macro will print error print logs with ratelimit
+ * @brief :     This Macro will prevent error print logs with ratelimit
  */
 #define CAM_ERR_RATE_LIMIT(__module, fmt, args...)                 \
 	pr_info_ratelimited("CAM_ERR: %s: %s: %d " fmt "\n",            \

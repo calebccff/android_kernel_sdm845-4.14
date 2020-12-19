@@ -17,7 +17,7 @@ use constant IN_SHORTTEXT_BLANKLINE => 1;
 use constant IN_SHORTTEXT => 2;
 use constant AFTER_SHORTTEXT => 3;
 use constant CHECK_NEXT_SHORTTEXT => 4;
-use constant SHORTTEXT_LIMIT => 75;
+use constant SHORTTEXT_LIMIT => 120;
 
 my $P = $0;
 my $D = dirname(abs_path($P));
@@ -56,7 +56,7 @@ my %ignore_type = ();
 my @ignore = ();
 my $help = 0;
 my $configuration_file = ".checkpatch.conf";
-my $max_line_length = 80;
+my $max_line_length = 120;
 my $ignore_perl_version = 0;
 my $minimum_perl_version = 5.10.0;
 my $min_conf_desc_length = 4;
@@ -2693,9 +2693,9 @@ sub process {
 			$commit_log_possible_stack_dump = 1;
 		}
 
-# Check for line lengths > 75 in commit log, warn once
+# Check for line lengths > 120 in commit log, warn once
 		if ($in_commit_log && !$commit_log_long_line &&
-		    length($line) > 75 &&
+		    length($line) > 120 &&
 		    !($line =~ /^\s*[a-zA-Z0-9_\/\.]+\s+\|\s+\d+/ ||
 					# file delta changes
 		      $line =~ /^\s*(?:[\w\.\-]+\/)++[\w\.\-]+:/ ||
@@ -2704,7 +2704,7 @@ sub process {
 					# A Fixes: or Link: line
 		      $commit_log_possible_stack_dump)) {
 			WARN("COMMIT_LOG_LONG_LINE",
-			     "Possible unwrapped commit description (prefer a maximum 75 chars per line)\n" . $herecurr);
+			     "Possible unwrapped commit description (prefer a maximum 120 chars per line)\n" . $herecurr);
 			$commit_log_long_line = 1;
 		}
 
@@ -3726,7 +3726,6 @@ sub process {
 				fix_insert_line($fixlinenr, $fixedline);
 			}
 		}
-
 #
 # Checks which are anchored on the added line.
 #

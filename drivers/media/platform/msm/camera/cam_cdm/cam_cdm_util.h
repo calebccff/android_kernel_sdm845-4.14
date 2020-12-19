@@ -16,6 +16,13 @@
 /* Max len for tag name for header while dumping cmd buffer*/
 #define CAM_CDM_CMD_TAG_MAX_LEN 32
 
+#define CAM_CDM_SW_CMD_COUNT    2
+#define CAM_CMD_LENGTH_MASK     0xFFFF
+#define CAM_CDM_COMMAND_OFFSET  24
+
+#define CAM_CDM_DMI_DATA_HI_OFFSET   8
+#define CAM_CDM_DMI_DATA_LO_OFFSET   12
+
 enum cam_cdm_command {
 	CAM_CDM_CMD_UNUSED = 0x0,
 	CAM_CDM_CMD_DMI = 0x1,

@@ -37,6 +37,20 @@
 #define MAX_PATHS	2
 #define DBL_BUF		2
 
+#include <linux/pm_qos.h>
+struct qos_request_v {
+	int max_state;
+	int max_devfreq;
+	int min_devfreq;
+};
+
+static bool cpubw_flag = false;
+static struct qos_request_v qos_request_value = {
+	.max_state = 0,
+	.max_devfreq = INT_MAX,
+	.min_devfreq = 0,
+};
+
 struct dev_data {
 	struct msm_bus_vectors vectors[MAX_PATHS * DBL_BUF];
 	struct msm_bus_paths bw_levels[DBL_BUF];
@@ -47,6 +61,7 @@ struct dev_data {
 	int cur_ab;
 	int cur_ib;
 	long gov_ab;
+	unsigned int ab_percent;
 	struct devfreq *df;
 	struct devfreq_dev_profile dp;
 };
@@ -210,7 +225,11 @@ int devfreq_add_devbw(struct device *dev)
 
 	p = &d->dp;
 	p->polling_ms = 50;
-	p->target = devbw_target;
+	if (strstr(d->bw_data.name, "soc:qcom,cpubw") != NULL) {
+		p->target = devbw_target_cpubw;
+		cpubw_flag = true;
+	} else
+		p->target = devbw_target;
 	p->get_dev_status = devbw_get_dev_status;
 	if (of_get_child_count(dev->of_node))
 		ret = parse_child_nodes_for_opp(dev);
@@ -219,6 +238,15 @@ int devfreq_add_devbw(struct device *dev)
 
 	if (ret)
 		dev_err(dev, "Couldn't parse OPP table:%d\n", ret);
+
+	if (of_find_property(dev->of_node, PROP_AB_PER, &len)) {
+		ret = of_property_read_u32(dev->of_node, PROP_AB_PER,
+							&d->ab_percent);
+		if (ret)
+			return ret;
+
+		dev_dbg(dev, "ab-percent used %u\n", d->ab_percent);
+	}
 
 	d->bus_client = msm_bus_scale_register_client(&d->bw_data);
 	if (!d->bus_client) {
@@ -235,6 +263,11 @@ int devfreq_add_devbw(struct device *dev)
 		return PTR_ERR(d->df);
 	}
 
+	if (cpubw_flag) {
+		qos_request_value.max_state = len;
+		qos_request_value.min_devfreq = 0;
+		qos_request_value.max_devfreq = len;
+	}
 	return 0;
 }
 
@@ -283,9 +316,20 @@ static struct platform_driver devbw_driver = {
 		.name = "devbw",
 		.of_match_table = devbw_match_table,
 		.suppress_bind_attrs = true,
+		.owner = THIS_MODULE,
 	},
 };
 
-module_platform_driver(devbw_driver);
+static int __init devbw_init(void)
+{
+	/* add cpufreq qos notify */
+	cpubw_flag = false;
+	pm_qos_add_notifier(PM_QOS_DEVFREQ_MAX, &devfreq_qos_notifier);
+	pm_qos_add_notifier(PM_QOS_DEVFREQ_MIN, &devfreq_qos_notifier);
+	platform_driver_register(&devbw_driver);
+	return 0;
+}
+device_initcall(devbw_init);
+
 MODULE_DESCRIPTION("Device DDR bandwidth voting driver MSM SoCs");
 MODULE_LICENSE("GPL v2");

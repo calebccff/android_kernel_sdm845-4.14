@@ -1,4 +1,4 @@
-/* Copyright (c) 2017-2019, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2017, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -15,7 +15,6 @@
 #include "cam_flash_dev.h"
 #include "cam_flash_soc.h"
 #include "cam_flash_core.h"
-#include "cam_common_util.h"
 
 static int32_t cam_flash_driver_cmd(struct cam_flash_ctrl *fctrl,
 		void *arg, struct cam_flash_private_soc *soc_private)
@@ -33,7 +32,8 @@ static int32_t cam_flash_driver_cmd(struct cam_flash_ctrl *fctrl,
 	if (cmd->handle_type != CAM_HANDLE_USER_POINTER) {
 		CAM_ERR(CAM_FLASH, "Invalid handle type: %d",
 			cmd->handle_type);
-		return -EINVAL;
+		rc = -EINVAL;
+		goto release_mutex;
 	}
 
 	mutex_lock(&(fctrl->flash_mutex));
@@ -58,8 +58,7 @@ static int32_t cam_flash_driver_cmd(struct cam_flash_ctrl *fctrl,
 			goto release_mutex;
 		}
 
-		rc = copy_from_user(&flash_acq_dev,
-			u64_to_user_ptr(cmd->handle),
+		rc = copy_from_user(&flash_acq_dev, (void __user *)cmd->handle,
 			sizeof(flash_acq_dev));
 		if (rc) {
 			CAM_ERR(CAM_FLASH, "Failed Copying from User");
@@ -79,8 +78,7 @@ static int32_t cam_flash_driver_cmd(struct cam_flash_ctrl *fctrl,
 		fctrl->bridge_intf.session_hdl =
 			flash_acq_dev.session_handle;
 
-		rc = copy_to_user(u64_to_user_ptr(cmd->handle),
-			&flash_acq_dev,
+		rc = copy_to_user((void __user *) cmd->handle, &flash_acq_dev,
 			sizeof(struct cam_sensor_acquire_dev));
 		if (rc) {
 			CAM_ERR(CAM_FLASH, "Failed Copy to User with rc = %d",
@@ -96,7 +94,7 @@ static int32_t cam_flash_driver_cmd(struct cam_flash_ctrl *fctrl,
 		if ((fctrl->flash_state == CAM_FLASH_STATE_INIT) ||
 			(fctrl->flash_state == CAM_FLASH_STATE_START)) {
 			CAM_WARN(CAM_FLASH,
-				"Wrong state for Release dev: Prev state:%d",
+				"Cannot apply Release dev: Prev state:%d",
 				fctrl->flash_state);
 		}
 
@@ -118,18 +116,11 @@ static int32_t cam_flash_driver_cmd(struct cam_flash_ctrl *fctrl,
 			rc = -EAGAIN;
 			goto release_mutex;
 		}
-
-		if ((fctrl->flash_state == CAM_FLASH_STATE_CONFIG) ||
-			(fctrl->flash_state == CAM_FLASH_STATE_START))
-			fctrl->func_tbl.flush_req(fctrl, FLUSH_ALL, 0);
-
-		if (cam_flash_release_dev(fctrl))
-			CAM_WARN(CAM_FLASH,
-				"Failed in destroying the device Handle");
-
-		if (fctrl->func_tbl.power_ops(fctrl, false))
-			CAM_WARN(CAM_FLASH, "Power Down Failed");
-
+		rc = cam_flash_release_dev(fctrl);
+		if (rc)
+			CAM_ERR(CAM_FLASH,
+				"Failed in destroying the device Handle rc= %d",
+				rc);
 		fctrl->flash_state = CAM_FLASH_STATE_INIT;
 		break;
 	}
@@ -149,8 +140,8 @@ static int32_t cam_flash_driver_cmd(struct cam_flash_ctrl *fctrl,
 			flash_cap.max_current_torch[i] =
 				soc_private->torch_max_current[i];
 
-		if (copy_to_user(u64_to_user_ptr(cmd->handle),
-			&flash_cap, sizeof(struct cam_flash_query_cap_info))) {
+		if (copy_to_user((void __user *) cmd->handle, &flash_cap,
+			sizeof(struct cam_flash_query_cap_info))) {
 			CAM_ERR(CAM_FLASH, "Failed Copy to User");
 			rc = -EFAULT;
 			goto release_mutex;
@@ -168,6 +159,17 @@ static int32_t cam_flash_driver_cmd(struct cam_flash_ctrl *fctrl,
 			goto release_mutex;
 		}
 
+		rc = cam_flash_prepare(fctrl, true);
+		if (rc) {
+			CAM_ERR(CAM_FLASH,
+				"Enable Regulator Failed rc = %d", rc);
+			goto release_mutex;
+		}
+		rc = cam_flash_apply_setting(fctrl, 0);
+		if (rc) {
+			CAM_ERR(CAM_FLASH, "cannot apply settings rc = %d", rc);
+			goto release_mutex;
+		}
 		fctrl->flash_state = CAM_FLASH_STATE_START;
 		break;
 	}
@@ -204,35 +206,6 @@ static int32_t cam_flash_driver_cmd(struct cam_flash_ctrl *fctrl,
 release_mutex:
 	mutex_unlock(&(fctrl->flash_mutex));
 	return rc;
-}
-
-static int32_t cam_flash_init_default_params(struct cam_flash_ctrl *fctrl)
-{
-	/* Validate input parameters */
-	if (!fctrl) {
-		CAM_ERR(CAM_FLASH, "failed: invalid params fctrl %pK",
-			fctrl);
-		return -EINVAL;
-	}
-
-	CAM_DBG(CAM_FLASH,
-		"master_type: %d", fctrl->io_master_info.master_type);
-	/* Initialize cci_client */
-	if (fctrl->io_master_info.master_type == CCI_MASTER) {
-		fctrl->io_master_info.cci_client = kzalloc(sizeof(
-			struct cam_sensor_cci_client), GFP_KERNEL);
-		if (!(fctrl->io_master_info.cci_client))
-			return -ENOMEM;
-	} else if (fctrl->io_master_info.master_type == I2C_MASTER) {
-		if (!(fctrl->io_master_info.client))
-			return -EINVAL;
-	} else {
-		CAM_ERR(CAM_FLASH,
-			"Invalid master / Master type Not supported");
-		return -EINVAL;
-	}
-
-	return 0;
 }
 
 static const struct of_device_id cam_flash_dt_match[] = {
@@ -383,32 +356,10 @@ static const struct v4l2_subdev_internal_ops cam_flash_internal_ops = {
 	.close = cam_flash_subdev_close,
 };
 
-static int cam_flash_init_subdev(struct cam_flash_ctrl *fctrl)
-{
-	int rc = 0;
-
-	strlcpy(fctrl->device_name, CAM_FLASH_NAME,
-		sizeof(fctrl->device_name));
-	fctrl->v4l2_dev_str.internal_ops =
-		&cam_flash_internal_ops;
-	fctrl->v4l2_dev_str.ops = &cam_flash_subdev_ops;
-	fctrl->v4l2_dev_str.name = CAMX_FLASH_DEV_NAME;
-	fctrl->v4l2_dev_str.sd_flags =
-		V4L2_SUBDEV_FL_HAS_DEVNODE | V4L2_SUBDEV_FL_HAS_EVENTS;
-	fctrl->v4l2_dev_str.ent_function = CAM_FLASH_DEVICE_TYPE;
-	fctrl->v4l2_dev_str.token = fctrl;
-
-	rc = cam_register_subdev(&(fctrl->v4l2_dev_str));
-	if (rc)
-		CAM_ERR(CAM_FLASH, "Fail to create subdev with %d", rc);
-
-	return rc;
-}
-
 static int32_t cam_flash_platform_probe(struct platform_device *pdev)
 {
-	int32_t rc = 0, i = 0;
-	struct cam_flash_ctrl *fctrl = NULL;
+	int32_t rc = 0;
+	struct cam_flash_ctrl *flash_ctrl = NULL;
 
 	CAM_DBG(CAM_FLASH, "Enter");
 	if (!pdev->dev.of_node) {
@@ -607,44 +558,23 @@ static struct platform_driver cam_flash_platform_driver = {
 		.name = "CAM-FLASH-DRIVER",
 		.owner = THIS_MODULE,
 		.of_match_table = cam_flash_dt_match,
-		.suppress_bind_attrs = true,
 	},
 };
 
-static const struct i2c_device_id i2c_id[] = {
-	{FLASH_DRIVER_I2C, (kernel_ulong_t)NULL},
-	{ }
-};
-
-static struct i2c_driver cam_flash_i2c_driver = {
-	.id_table = i2c_id,
-	.probe  = cam_flash_i2c_driver_probe,
-	.remove = cam_flash_i2c_driver_remove,
-	.driver = {
-		.name = FLASH_DRIVER_I2C,
-	},
-};
-
-static int32_t __init cam_flash_init_module(void)
+static int __init cam_flash_init_module(void)
 {
 	int32_t rc = 0;
 
 	rc = platform_driver_register(&cam_flash_platform_driver);
-	if (rc == 0) {
-		CAM_DBG(CAM_FLASH, "platform probe success");
-		return 0;
-	}
-
-	rc = i2c_add_driver(&cam_flash_i2c_driver);
 	if (rc)
-		CAM_ERR(CAM_FLASH, "i2c_add_driver failed rc: %d", rc);
+		CAM_ERR(CAM_FLASH, "platform probe for flash failed");
+
 	return rc;
 }
 
 static void __exit cam_flash_exit_module(void)
 {
 	platform_driver_unregister(&cam_flash_platform_driver);
-	i2c_del_driver(&cam_flash_i2c_driver);
 }
 
 module_init(cam_flash_init_module);

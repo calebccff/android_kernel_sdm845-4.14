@@ -421,6 +421,8 @@ int dsi_display_validate_mode_change(struct dsi_display *display,
 			struct dsi_display_mode *cur_dsi_mode,
 			struct dsi_display_mode *mode);
 
+extern int connector_state_crtc_index;
+extern int msm_drm_notifier_call_chain(unsigned long val, void *v);
 /**
  * dsi_display_set_mode() - Set mode on the display.
  * @display:           Handle to display.
@@ -710,5 +712,7 @@ int dsi_display_get_panel_vfp(void *display,
 #ifdef CONFIG_DRM_SDE_SPECIFIC_PANEL
 struct dsi_display *dsi_display_get_main_display(void);
 #endif /* CONFIG_DRM_SDE_SPECIFIC_PANEL */
+
+struct dsi_display *get_main_display(void);
 
 #endif /* _DSI_DISPLAY_H_ */

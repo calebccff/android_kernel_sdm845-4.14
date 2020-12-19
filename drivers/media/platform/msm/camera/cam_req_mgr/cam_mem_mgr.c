@@ -1,4 +1,4 @@
-/* Copyright (c) 2016-2019, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2016-2018, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -401,7 +401,7 @@ int cam_mem_mgr_cache_ops(struct cam_mem_cache_ops_cmd *cmd)
 			cache_dir = DMA_BIDIRECTIONAL;
 			break;
 		default:
-			CAM_ERR(CAM_MEM,
+			CAM_ERR(CAM_CRM,
 				"invalid cache ops :%d", cmd->mem_cache_ops);
 			rc = -EINVAL;
 			goto end;
@@ -914,7 +914,7 @@ static int cam_mem_util_unmap_hw_va(int32_t idx,
 				rc = cam_smmu_unmap_kernel_iova(mmu_hdls[i],
 					tbl.bufq[idx].dma_buf, region);
 			} else {
-				CAM_ERR(CAM_MEM,
+				CAM_ERR(CAM_CRM,
 					"invalid caller for unmapping : %d",
 					client);
 				rc = -EINVAL;
@@ -931,7 +931,7 @@ static int cam_mem_util_unmap_hw_va(int32_t idx,
 	return rc;
 
 unmap_end:
-	CAM_ERR(CAM_MEM, "unmapping failed");
+	CAM_ERR(CAM_CRM, "unmapping failed");
 	return rc;
 }
 
@@ -954,11 +954,11 @@ static int cam_mem_mgr_cleanup_table(void)
 	mutex_lock(&tbl.m_lock);
 	for (i = 1; i < CAM_MEM_BUFQ_MAX; i++) {
 		if (!tbl.bufq[i].active) {
-			CAM_DBG(CAM_MEM,
+			CAM_DBG(CAM_CRM,
 				"Buffer inactive at idx=%d, continuing", i);
 			continue;
 		} else {
-			CAM_DBG(CAM_MEM,
+			CAM_DBG(CAM_CRM,
 			"Active buffer at idx=%d, possible leak needs unmapping",
 			i);
 			cam_mem_mgr_unmap_active_buf(i);
@@ -994,7 +994,6 @@ static int cam_mem_mgr_cleanup_table(void)
 
 void cam_mem_mgr_deinit(void)
 {
-	atomic_set(&cam_mem_mgr_state, CAM_MEM_MGR_UNINITIALIZED);
 	cam_mem_mgr_cleanup_table();
 	mutex_lock(&tbl.m_lock);
 	bitmap_zero(tbl.bitmap, tbl.bits);
@@ -1011,16 +1010,16 @@ static int cam_mem_util_unmap(int32_t idx,
 	enum cam_smmu_region_id region = CAM_SMMU_REGION_SHARED;
 
 	if (idx >= CAM_MEM_BUFQ_MAX || idx <= 0) {
-		CAM_ERR(CAM_MEM, "Incorrect index");
+		CAM_ERR(CAM_CRM, "Incorrect index");
 		return -EINVAL;
 	}
 
-	CAM_DBG(CAM_MEM, "Flags = %X idx %d", tbl.bufq[idx].flags, idx);
+	CAM_DBG(CAM_CRM, "Flags = %X idx %d", tbl.bufq[idx].flags, idx);
 
 	mutex_lock(&tbl.m_lock);
 	if ((!tbl.bufq[idx].active) &&
 		(tbl.bufq[idx].vaddr) == 0) {
-		CAM_WARN(CAM_MEM, "Buffer at idx=%d is already unmapped,",
+		CAM_WARN(CAM_CRM, "Buffer at idx=%d is already unmapped,",
 			idx);
 		mutex_unlock(&tbl.m_lock);
 		return 0;
@@ -1135,7 +1134,7 @@ int cam_mem_mgr_request_mem(struct cam_mem_mgr_request_desc *inp,
 	int rc = 0;
 	uint32_t heap_id;
 	int32_t ion_flag = 0;
-	uintptr_t kvaddr;
+	uint64_t kvaddr;
 	dma_addr_t iova = 0;
 	size_t request_len = 0;
 	uint32_t mem_handle;
@@ -1215,7 +1214,7 @@ int cam_mem_mgr_request_mem(struct cam_mem_mgr_request_desc *inp,
 		region);
 
 	if (rc < 0) {
-		CAM_ERR(CAM_MEM, "SMMU mapping failed");
+		CAM_ERR(CAM_CRM, "SMMU mapping failed");
 		goto smmu_fail;
 	}
 
@@ -1363,7 +1362,7 @@ int cam_mem_mgr_reserve_memory_region(struct cam_mem_mgr_request_desc *inp,
 		&request_len);
 
 	if (rc) {
-		CAM_ERR(CAM_MEM, "Reserving secondary heap failed");
+		CAM_ERR(CAM_CRM, "Reserving secondary heap failed");
 		goto smmu_fail;
 	}
 
@@ -1462,22 +1461,22 @@ int cam_mem_mgr_free_memory_region(struct cam_mem_mgr_memory_desc *inp)
 	memcpy(&smmu_hdl, tbl.bufq[idx].hdls,
 		sizeof(int32_t));
 	if (inp->smmu_hdl != smmu_hdl) {
-		CAM_ERR(CAM_MEM,
+		CAM_ERR(CAM_CRM,
 			"Passed SMMU handle doesn't match with internal hdl");
 		return -ENODEV;
 	}
 
 	rc = cam_smmu_release_sec_heap(inp->smmu_hdl);
 	if (rc) {
-		CAM_ERR(CAM_MEM,
+		CAM_ERR(CAM_CRM,
 			"Sec heap region release failed");
 		return -ENODEV;
 	}
 
-	CAM_DBG(CAM_MEM, "Releasing hdl = %X", inp->mem_handle);
+	CAM_DBG(CAM_CRM, "Releasing hdl = %X", inp->mem_handle);
 	rc = cam_mem_util_unmap(idx, CAM_SMMU_MAPPING_KERNEL);
 	if (rc)
-		CAM_ERR(CAM_MEM, "unmapping secondary heap failed");
+		CAM_ERR(CAM_CRM, "unmapping secondary heap failed");
 
 	return rc;
 }

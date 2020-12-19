@@ -1041,6 +1041,10 @@ const char * const vmstat_text[] = {
 	"nr_zone_active_anon",
 	"nr_zone_inactive_file",
 	"nr_zone_active_file",
+#ifdef CONFIG_MEMPLUS
+	"nr_zone_inactive_anon_swpcache",
+	"nr_zone_active_anon_swpcache",
+#endif
 	"nr_zone_unevictable",
 	"nr_zone_write_pending",
 	"nr_mlock",
@@ -1064,12 +1068,19 @@ const char * const vmstat_text[] = {
 	"numa_local",
 	"numa_other",
 #endif
+#ifdef CONFIG_SMART_BOOST
+	"nr_uid_lru",
+#endif
 
 	/* Node-based counters */
 	"nr_inactive_anon",
 	"nr_active_anon",
 	"nr_inactive_file",
 	"nr_active_file",
+#ifdef CONFIG_MEMPLUS
+	"nr_inactive_anon_swpcache",
+	"nr_active_anon_swpcache",
+#endif
 	"nr_unevictable",
 	"nr_slab_reclaimable",
 	"nr_slab_unreclaimable",

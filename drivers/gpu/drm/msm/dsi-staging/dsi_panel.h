@@ -116,6 +116,7 @@ struct dsi_backlight_config {
 
 	u32 bl_min_level;
 	u32 bl_max_level;
+	u32 bl_def_val;
 	u32 brightness_max_level;
 	u32 bl_level;
 	u32 bl_scale;
@@ -127,7 +128,7 @@ struct dsi_backlight_config {
 	u32 pwm_pmic_bank;
 	u32 pwm_period_usecs;
 	int pwm_gpio;
-
+    bool bl_high2bit;
 	/* WLED params */
 	struct led_trigger *wled;
 	struct backlight_device *raw_bd;
@@ -145,6 +146,8 @@ struct dsi_panel_reset_config {
 	int reset_gpio;
 	int disp_en_gpio;
 	int lcd_mode_sel_gpio;
+    int vci_gpio;
+	int poc_gpio;
 	u32 mode_sel_state;
 };
 

@@ -844,6 +844,12 @@ static int _sde_kms_release_splash_buffer(unsigned int mem_addr,
 		splash_buffer_size -= ramdump_buffer_size;
 	}
 
+	/* reserved 10MB memory for display in dump mode */
+	if (size >= 0xa00000) {
+		mem_addr += 0xa00000;
+		size -= 0xa00000;
+	}
+
 	pfn_start = mem_addr >> PAGE_SHIFT;
 	pfn_end = (mem_addr + splash_buffer_size) >> PAGE_SHIFT;
 

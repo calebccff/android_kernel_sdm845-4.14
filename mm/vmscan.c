@@ -112,6 +112,11 @@ struct scan_control {
 	/* One of the zones is ready for compaction */
 	unsigned int compaction_ready:1;
 
+#ifdef CONFIG_MEMPLUS
+	/* 1: swap to zram, 0: swap to file */
+	unsigned int swp_bdv_type:1;
+#endif
+
 	/* Incremented by the number of inactive pages that were scanned */
 	unsigned long nr_scanned;
 
@@ -158,6 +163,16 @@ struct scan_control {
  * From 0 .. 100.  Higher means more swappy.
  */
 int vm_swappiness = 60;
+#ifdef CONFIG_KSWAPD_LAZY_RECLAIM
+/*
+ * time for kswapd to breath between each scanning loop
+ */
+unsigned int vm_breath_period __read_mostly = 4000;
+/*
+ * default adj for kswapd to perform lazy-reclaim
+ */
+int vm_breath_priority __read_mostly = 500;
+#endif
 /*
  * The total number of pages which are beyond the high watermark within all
  * zones.
@@ -1389,6 +1404,7 @@ keep:
 	return nr_reclaimed;
 }
 
+/* bin.zhong@ASTI add for CONFIG_MEMPLUS */
 unsigned long reclaim_clean_pages_from_list(struct zone *zone,
 					    struct list_head *page_list)
 {
@@ -1608,6 +1624,15 @@ static unsigned long isolate_lru_pages(unsigned long nr_to_scan,
 		 * pages, triggering a premature OOM.
 		 */
 		scan++;
+
+		/* CONFIG_MEMPLUS add start by bin.zhong@ASTI */
+		if (memplus_check_isolate_page(page) &&
+				(BIT(lru) & LRU_ALL_ANON)) {
+			list_move(&page->lru, src);
+			continue;
+		}
+		/* add end */
+
 		switch (__isolate_lru_page(page, mode)) {
 		case 0:
 			nr_pages = hpage_nr_pages(page);
@@ -2211,6 +2236,13 @@ static bool inactive_list_is_low(struct lruvec *lruvec, bool file,
 	if (!file && !total_swap_pages)
 		return false;
 
+	/* CONFIG_MEMPLUS add start by bin.zhong@oneplus.com */
+	if (!file) {
+		inactive_lru = MEMPLUS_PAGE_LRU;
+		active_lru = MEMPLUS_PAGE_LRU + LRU_ACTIVE;
+	}
+	/* add end */
+
 	inactive = lruvec_lru_size(lruvec, inactive_lru, sc->reclaim_idx);
 	active = lruvec_lru_size(lruvec, active_lru, sc->reclaim_idx);
 
@@ -2281,6 +2313,13 @@ static void get_scan_count(struct lruvec *lruvec, struct mem_cgroup *memcg,
 	unsigned long anon, file;
 	unsigned long ap, fp;
 	enum lru_list lru;
+
+    /* CONFIG_MEMPLUS add start by bin.zhong@ASTI */
+	if (memplus_enabled()) {
+		scan_balance = SCAN_EQUAL;
+		goto out;
+	}
+	/* add end */
 
 	/* If we have no swap space, do not bother scanning anon pages. */
 	if (!sc->may_swap || mem_cgroup_get_nr_swap_pages(memcg) <= 0) {
@@ -2436,6 +2475,14 @@ out:
 		if (!scan && !mem_cgroup_online(memcg))
 			scan = min(size, SWAP_CLUSTER_MAX);
 
+		/* CONFIG_MEMPLUS add start by bin.zhong@ASTI */
+		if (memplus_enabled() &&
+			(lru == LRU_INACTIVE_ANON || lru == LRU_ACTIVE_ANON)) {
+			size = 0;
+			scan = 0;
+		}
+		/* add end */
+
 		switch (scan_balance) {
 		case SCAN_EQUAL:
 			/* Scan lists relative to size */
@@ -2507,8 +2554,10 @@ static void shrink_node_memcg(struct pglist_data *pgdat, struct mem_cgroup *memc
 			 sc->priority == DEF_PRIORITY);
 
 	blk_start_plug(&plug);
-	while (nr[LRU_INACTIVE_ANON] || nr[LRU_ACTIVE_FILE] ||
-					nr[LRU_INACTIVE_FILE]) {
+	/* CONFIG_MEMPLUS modify start by bin.zhong@ASTI */
+	while (nr[MEMPLUS_PAGE_LRU] || nr[LRU_ACTIVE_FILE] ||
+			 nr[LRU_INACTIVE_FILE]) {
+    /* modify end */
 		unsigned long nr_anon, nr_file, percentage;
 		unsigned long nr_scanned;
 
@@ -2535,7 +2584,10 @@ static void shrink_node_memcg(struct pglist_data *pgdat, struct mem_cgroup *memc
 		 * proportional to the original scan target.
 		 */
 		nr_file = nr[LRU_INACTIVE_FILE] + nr[LRU_ACTIVE_FILE];
-		nr_anon = nr[LRU_INACTIVE_ANON] + nr[LRU_ACTIVE_ANON];
+		/* CONFIG_MEMPLUS modify start by bin.zhong@ASTI */
+		lru = MEMPLUS_PAGE_LRU;
+		nr_anon = nr[lru] + nr[lru + LRU_ACTIVE];
+		/* modify end */
 
 		/*
 		 * It's just vindictive to attack the larger once the smaller
@@ -2547,8 +2599,10 @@ static void shrink_node_memcg(struct pglist_data *pgdat, struct mem_cgroup *memc
 			break;
 
 		if (nr_file > nr_anon) {
-			unsigned long scan_target = targets[LRU_INACTIVE_ANON] +
-						targets[LRU_ACTIVE_ANON] + 1;
+			/* CONFIG_MEMPLUS modify start by bin.zhong@ASTI */
+			unsigned long scan_target = targets[lru] +
+						targets[lru + LRU_ACTIVE] + 1;
+			/* modify end */
 			lru = LRU_BASE;
 			percentage = nr_anon * 100 / scan_target;
 		} else {
@@ -2566,7 +2620,9 @@ static void shrink_node_memcg(struct pglist_data *pgdat, struct mem_cgroup *memc
 		 * Recalculate the other LRU scan count based on its original
 		 * scan target and the percentage scanning already complete
 		 */
-		lru = (lru == LRU_FILE) ? LRU_BASE : LRU_FILE;
+		/* CONFIG_MEMPLUS modify start by bin.zhong@ASTI */
+		lru = (lru == LRU_FILE) ? MEMPLUS_PAGE_LRU : LRU_FILE;
+		/* CONFIG_MEMPLUS modify end */
 		nr_scanned = targets[lru] - nr[lru];
 		nr[lru] = targets[lru] * (100 - percentage) / 100;
 		nr[lru] -= min(nr[lru], nr_scanned);
@@ -3392,6 +3448,19 @@ static bool kswapd_shrink_node(pg_data_t *pgdat,
 	return sc->nr_scanned >= sc->nr_to_reclaim;
 }
 
+#ifdef CONFIG_KSWAPD_LAZY_RECLAIM
+void __sched usleep_range_interruptible(unsigned long min, unsigned long max)
+{
+	ktime_t kmin;
+	u64 delta;
+
+	__set_current_state(TASK_INTERRUPTIBLE);
+
+	kmin = ktime_set(0, min * NSEC_PER_USEC);
+	delta = (u64)(max - min) * NSEC_PER_USEC;
+	schedule_hrtimeout_range(&kmin, delta, HRTIMER_MODE_REL);
+}
+#endif
 /*
  * For kswapd, balance_pgdat() will reclaim pages across a node from zones
  * that are eligible for use by the caller until at least one zone is
@@ -3506,8 +3575,19 @@ static int balance_pgdat(pg_data_t *pgdat, int order, int classzone_idx)
 		 * progress in reclaiming pages
 		 */
 		nr_reclaimed = sc.nr_reclaimed - nr_reclaimed;
+#ifndef CONFIG_KSWAPD_LAZY_RECLAIM
 		if (raise_priority || !nr_reclaimed)
 			sc.priority--;
+#else
+		if (raise_priority || !nr_reclaimed) {
+			sc.priority--;
+
+			if (vm_breath_period && nr_reclaimed && !atomic_read(&alloc_ongoing)) {
+				sc.priority++;
+				usleep_range_interruptible(vm_breath_period, vm_breath_period << 1);
+			}
+		}
+#endif
 	} while (sc.priority >= 1);
 
 	if (!sc.nr_reclaimed)

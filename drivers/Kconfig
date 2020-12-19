@@ -223,4 +223,6 @@ source "drivers/esoc/Kconfig"
 
 source "drivers/cpuquiet/Kconfig"
 
+source "drivers/oneplus/Kconfig"
+
 endmenu

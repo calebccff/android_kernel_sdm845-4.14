@@ -31,6 +31,9 @@
 	snd_934x: sound-tavil {
 		compatible = "qcom,sdm845-asoc-snd-tavil";
 		qcom,model = "sdm845-tavil-snd-card";
+		/*MM.Audio, 2019/07/13, add for screen record headset mic path*/
+		qcom,afe-rxtx-lb = <1>;
+		/*add end*/
 		qcom,ext-disp-audio-rx;
 		qcom,wcn-btfm;
 		qcom,mi2s-audio-intf;

@@ -4044,6 +4044,12 @@ static int ufshcd_wait_for_dev_cmd(struct ufs_hba *hba,
 	return err;
 }
 
+/* liochen@BSP 2016/11/30, Add ufs info into *##*37847# */
+int ufshcd_read_geometry_desc(struct ufs_hba *hba, u8 *buf, u32 size)
+{
+       return ufshcd_read_desc(hba, QUERY_DESC_IDN_GEOMETRY, 0, buf, size);
+}
+
 /**
  * ufshcd_get_dev_cmd_tag - Get device management command tag
  * @hba: per-adapter instance
@@ -8973,6 +8979,10 @@ reinit:
 			}
 			hba->clk_scaling.is_allowed = true;
 		}
+
+
+		/* liochen@BSP, 2016/11/30, Add ufs info into *##*37847# */
+		ufs_fill_info(hba);
 
 		scsi_scan_host(hba->host);
 		pm_runtime_put_sync(hba->dev);

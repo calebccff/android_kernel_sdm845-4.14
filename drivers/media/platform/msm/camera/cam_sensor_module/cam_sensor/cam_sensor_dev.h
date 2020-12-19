@@ -1,4 +1,4 @@
-/* Copyright (c) 2017-2019, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2017-2018, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -32,7 +32,6 @@
 #include <cam_subdev.h>
 #include <cam_sensor_io.h>
 #include "cam_debug_util.h"
-#include "cam_context.h"
 
 #define NUM_MASTERS 2
 #define NUM_QUEUES 2
@@ -75,7 +74,6 @@ struct intf_params {
 
 /**
  * struct cam_sensor_ctrl_t: Camera control structure
- * @device_name: Sensor device name
  * @pdev: Platform device
  * @cam_sensor_mutex: Sensor mutex
  * @sensordata: Sensor board Information

@@ -34,6 +34,8 @@
 #include <linux/mmu_context.h>
 #include <linux/poll.h>
 #include <linux/eventfd.h>
+#include <linux/pm_qos.h>
+#include <linux/hrtimer.h>
 
 #include "u_fs.h"
 #include "u_f.h"
@@ -1170,6 +1172,27 @@ error:
 	return ret;
 }
 
+static enum hrtimer_restart ffs_op_timeout(struct hrtimer *timer)
+{
+	static int cnt;
+
+	/* wait 5s to close */
+	if (!ffs_op_flg)
+		cnt = cnt + 1;
+	if (cnt > 5) {
+		pr_info("ffs_op_timeout, close lpm_disable\n");
+		msm_cpuidle_set_sleep_disable(false);
+		cnt = 0;
+		lpm_flg = false;
+		return HRTIMER_NORESTART;
+	}
+
+	hrtimer_start(&ffs_op_timer,
+		ms_to_ktime(ADB_PULL_PUSH_TIMEOUT),
+		HRTIMER_MODE_REL);
+	return HRTIMER_RESTART;
+}
+
 static int
 ffs_epfile_open(struct inode *inode, struct file *file)
 {
@@ -1225,6 +1248,8 @@ static ssize_t ffs_epfile_write_iter(struct kiocb *kiocb, struct iov_iter *from)
 	struct ffs_data *ffs = epfile->ffs;
 	struct ffs_io_data io_data, *p = &io_data;
 	ssize_t res;
+	struct ffs_epfile *epfile = kiocb->ki_filp->private_data;
+	bool adb_write_flag = false;
 
 	ENTER();
 
@@ -1247,10 +1272,30 @@ static ssize_t ffs_epfile_write_iter(struct kiocb *kiocb, struct iov_iter *from)
 
 	kiocb->private = p;
 
-	if (p->aio)
+	if (p->aio) {
 		kiocb_set_cancel_fn(kiocb, ffs_aio_cancel);
+	} else {
+		if ((strcmp(epfile->name, "ep1") == 0)
+			|| (strcmp(epfile->name, "ep2") == 0))
+			adb_write_flag = true;
+
+		if ((p->data.count & PM_QOS_REQUEST_SIZE) && adb_write_flag) {
+			if (!lpm_flg) {
+				msm_cpuidle_set_sleep_disable(true);
+				hrtimer_start(&ffs_op_timer,
+					ms_to_ktime(ADB_PULL_PUSH_TIMEOUT),
+					HRTIMER_MODE_REL);
+			}
+			lpm_flg = true;
+			ffs_op_flg = true;
+			pm_qos_update_request_timeout(&adb_little_cpu_qos,
+				(MAX_CPUFREQ - 4), ADB_QOS_TIMEOUT);
+		}
+	}
 
 	res = ffs_epfile_io(kiocb->ki_filp, p);
+	if (ffs_op_flg)
+		ffs_op_flg = false;
 	if (res == -EIOCBQUEUED)
 		return res;
 	if (p->aio)
@@ -1269,6 +1314,8 @@ static ssize_t ffs_epfile_read_iter(struct kiocb *kiocb, struct iov_iter *to)
 	struct ffs_data *ffs = epfile->ffs;
 	struct ffs_io_data io_data, *p = &io_data;
 	ssize_t res;
+	struct ffs_epfile *epfile = kiocb->ki_filp->private_data;
+	bool adb_read_flag = false;
 
 	ENTER();
 
@@ -1300,10 +1347,31 @@ static ssize_t ffs_epfile_read_iter(struct kiocb *kiocb, struct iov_iter *to)
 
 	kiocb->private = p;
 
-	if (p->aio)
+	if (p->aio) {
 		kiocb_set_cancel_fn(kiocb, ffs_aio_cancel);
+	} else {
+		if ((strcmp(epfile->name, "ep1") == 0)
+			|| (strcmp(epfile->name, "ep2") == 0))
+			adb_read_flag = true;
+
+		if ((p->data.count & PM_QOS_REQUEST_SIZE)
+				&& adb_read_flag) {
+			if (!lpm_flg) {
+				msm_cpuidle_set_sleep_disable(true);
+				hrtimer_start(&ffs_op_timer,
+					ms_to_ktime(ADB_PULL_PUSH_TIMEOUT),
+					HRTIMER_MODE_REL);
+			}
+			lpm_flg = true;
+			ffs_op_flg = true;
+			pm_qos_update_request_timeout(&adb_little_cpu_qos,
+				(MAX_CPUFREQ - 4), ADB_QOS_TIMEOUT);
+		}
+	}
 
 	res = ffs_epfile_io(kiocb->ki_filp, p);
+	if (ffs_op_flg)
+		ffs_op_flg = false;
 	if (res == -EIOCBQUEUED)
 		return res;
 
@@ -3995,6 +4063,10 @@ static int ffs_ready(struct ffs_data *ffs)
 done:
 	ffs_dev_unlock();
 
+	lpm_flg = false;
+	ffs_op_flg = false;
+	hrtimer_init(&ffs_op_timer, CLOCK_MONOTONIC, HRTIMER_MODE_REL);
+	ffs_op_timer.function = ffs_op_timeout;
 	ffs_log("exit: ret %d", ret);
 
 	return ret;

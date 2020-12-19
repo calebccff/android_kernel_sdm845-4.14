@@ -24,8 +24,6 @@
 #include "cam_cdm_util.h"
 #include "cam_cpas_api.h"
 
-#define CAM_VFE_CAMIF_IRQ_SOF_DEBUG_CNT_MAX 2
-
 struct cam_vfe_mux_camif_data {
 	void __iomem                                *mem_base;
 	struct cam_hw_intf                          *hw_intf;
@@ -144,9 +142,6 @@ int cam_vfe_camif_ver2_acquire_resource(
 	camif_data->first_line  = acquire_data->vfe_in.in_port->line_start;
 	camif_data->last_line   = acquire_data->vfe_in.in_port->line_stop;
 
-	CAM_DBG(CAM_ISP, "hw id:%d pix_pattern:%d dsp_mode=%d",
-		camif_res->hw_intf->hw_idx,
-		camif_data->pix_pattern, camif_data->dsp_mode);
 	return rc;
 }
 
@@ -594,7 +589,6 @@ static int cam_vfe_camif_handle_irq_bottom_half(void *handler_priv,
 	struct cam_vfe_top_irq_evt_payload   *payload;
 	uint32_t                              irq_status0;
 	uint32_t                              irq_status1;
-	uint32_t                              val;
 
 	if (!handler_priv || !evt_payload_priv) {
 		CAM_ERR(CAM_ISP, "Invalid params");
@@ -613,21 +607,7 @@ static int cam_vfe_camif_handle_irq_bottom_half(void *handler_priv,
 	switch (payload->evt_id) {
 	case CAM_ISP_HW_EVENT_SOF:
 		if (irq_status0 & camif_priv->reg_data->sof_irq_mask) {
-			if ((camif_priv->enable_sof_irq_debug) &&
-				(camif_priv->irq_debug_cnt <=
-				CAM_VFE_CAMIF_IRQ_SOF_DEBUG_CNT_MAX)) {
-				CAM_INFO_RATE_LIMIT(CAM_ISP, "Received SOF");
-
-				camif_priv->irq_debug_cnt++;
-				if (camif_priv->irq_debug_cnt ==
-					CAM_VFE_CAMIF_IRQ_SOF_DEBUG_CNT_MAX) {
-					camif_priv->enable_sof_irq_debug =
-						false;
-					camif_priv->irq_debug_cnt = 0;
-				}
-			} else {
-				CAM_DBG(CAM_ISP, "Received SOF");
-			}
+			CAM_DBG(CAM_ISP, "Received SOF");
 			ret = CAM_VFE_IRQ_STATUS_SUCCESS;
 		}
 		break;
@@ -657,14 +637,6 @@ static int cam_vfe_camif_handle_irq_bottom_half(void *handler_priv,
 			cam_vfe_camif_reg_dump(camif_node->res_priv);
 		} else {
 			ret = CAM_ISP_HW_ERROR_NONE;
-		}
-
-		if (camif_priv->camif_debug &
-			CAMIF_DEBUG_ENABLE_SENSOR_DIAG_STATUS) {
-			val = cam_io_r(camif_priv->mem_base +
-				camif_priv->camif_reg->vfe_diag_sensor_status);
-			CAM_DBG(CAM_ISP, "VFE_DIAG_SENSOR_STATUS: 0x%x",
-				camif_priv->mem_base, val);
 		}
 		break;
 	default:

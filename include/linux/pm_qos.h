@@ -46,6 +46,16 @@ enum pm_qos_flags_status {
 #define PM_QOS_MAX_ONLINE_CPUS_DEFAULT_VALUE	INT_MAX
 #define PM_QOS_DEV_LAT_DEFAULT_VALUE		0
 
+#define        MIN_CPUFREQ  0
+#define        MAX_CPUFREQ  0x40
+#define        MASK_CPUFREQ 0xE0
+
+#define PM_QOS_CPUFREQ_MAX_DEFAULT_VALUE       MAX_CPUFREQ
+#define PM_QOS_CPUFREQ_MIN_DEFAULT_VALUE       MIN_CPUFREQ
+#define PM_QOS_DEVFREQ_MAX_DEFAULT_VALUE       MAX_CPUFREQ
+#define PM_QOS_DEVFREQ_MIN_DEFAULT_VALUE       MIN_CPUFREQ
+
+extern void msm_cpuidle_set_sleep_disable(bool disable);
 #define PM_QOS_FLAG_NO_POWER_OFF	(1 << 0)
 #define PM_QOS_FLAG_REMOTE_WAKEUP	(1 << 1)
 

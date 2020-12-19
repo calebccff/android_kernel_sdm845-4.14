@@ -1,4 +1,4 @@
-/* Copyright (c) 2017-2019, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2017-2018, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -617,7 +617,7 @@ static int __cam_isp_ctx_handle_buf_done_in_activated_state(
 			continue;
 		}
 
-		if (!req_isp->bubble_detected) {
+		if (!bubble_state) {
 			CAM_DBG(CAM_ISP,
 				"Sync with success: req %lld res 0x%x fd 0x%x, ctx %u",
 				req->request_id,
@@ -645,14 +645,15 @@ static int __cam_isp_ctx_handle_buf_done_in_activated_state(
 		} else {
 			/*
 			 * Ignore the buffer done if bubble detect is on
-			 * Increment the ack number here, and queue the
-			 * request back to pending list whenever all the
-			 * buffers are done.
+			 * In most case, active list should be empty when
+			 * bubble detects. But for safety, we just move the
+			 * current active request to the pending list here.
 			 */
-			req_isp->num_acked++;
 			CAM_DBG(CAM_ISP,
 				"buf done with bubble state %d recovery %d",
 				bubble_state, req_isp->bubble_report);
+			list_del_init(&req->list);
+			list_add(&req->list, &ctx->pending_req_list);
 			continue;
 		}
 
@@ -862,11 +863,11 @@ static int __cam_isp_ctx_reg_upd_in_activated_state(
 	struct cam_isp_ctx_req  *req_isp = NULL;
 	struct cam_isp_hw_reg_update_event_data  *rup_event_data = evt_data;
 
-	if (list_empty(&ctx->wait_req_list)) {
-		CAM_ERR(CAM_ISP, "Reg upd ack with no waiting request");
+	if (list_empty(&ctx->pending_req_list)) {
+		CAM_ERR(CAM_ISP, "Reg upd ack with no pending request");
 		goto end;
 	}
-	req = list_first_entry(&ctx->wait_req_list,
+	req = list_first_entry(&ctx->pending_req_list,
 			struct cam_ctx_request, list);
 	list_del_init(&req->list);
 
@@ -1786,7 +1787,7 @@ static int __cam_isp_ctx_fs2_reg_upd_in_applied_state(
 	if (req_isp->num_fence_map_out != 0) {
 		list_add_tail(&req->list, &ctx->active_req_list);
 		ctx_isp->active_req_cnt++;
-		CAM_DBG(CAM_REQ, "move request %lld to active list(cnt = %d)",
+		CAM_DBG(CAM_ISP, "move request %lld to active list(cnt = %d)",
 			 req->request_id, ctx_isp->active_req_cnt);
 	} else {
 		/* no io config, so the request is completed. */
@@ -2702,7 +2703,7 @@ static int __cam_isp_ctx_rdi_only_sof_in_bubble_applied(
 	CAM_DBG(CAM_ISP, "frame id: %lld time stamp:0x%llx",
 		ctx_isp->frame_id, ctx_isp->sof_timestamp_val);
 
-	if (list_empty(&ctx->wait_req_list)) {
+	if (list_empty(&ctx->pending_req_list)) {
 		/*
 		 * If no pending req in epoch, this is an error case.
 		 * The recovery is to go back to sof state
@@ -2998,6 +2999,17 @@ static struct cam_isp_ctx_irq_ops
 	/* HALT */
 	{
 	},
+	/* FLUSH */
+	{
+		.irq_ops = {
+			NULL,
+			__cam_isp_ctx_sof_in_flush,
+			NULL,
+			NULL,
+			NULL,
+			__cam_isp_ctx_buf_done_in_applied,
+		},
+	},
 };
 
 static int __cam_isp_ctx_rdi_only_apply_req_top_state(
@@ -3215,6 +3227,7 @@ static int __cam_isp_ctx_config_dev_in_top_state(
 		CAM_ERR(CAM_ISP, "No more request obj free");
 		return -ENOMEM;
 	}
+	spin_unlock_bh(&ctx->lock);
 
 	req_isp = (struct cam_isp_ctx_req *) req->req_priv;
 
@@ -4222,6 +4235,12 @@ static struct cam_ctx_ops
 		.irq_ops = __cam_isp_ctx_handle_irq_in_activated,
 		.pagefault_ops = cam_isp_context_dump_active_request,
 	},
+	/* FLUSH */
+	{
+		.ioctl_ops = {},
+		.crm_ops = {},
+		.irq_ops = NULL,
+	},
 };
 
 
@@ -4339,12 +4358,6 @@ int cam_isp_context_init(struct cam_isp_context *ctx,
 	ctx_base->state_machine = cam_isp_ctx_top_state_machine;
 	ctx_base->ctx_priv = ctx;
 
-	/* initializing current state for error logging */
-	for (i = 0; i < CAM_ISP_CTX_STATE_MONITOR_MAX_ENTRIES; i++) {
-		ctx->cam_isp_ctx_state_monitor[i].curr_state =
-		CAM_ISP_CTX_ACTIVATED_MAX;
-	}
-	atomic64_set(&ctx->state_monitor_head, -1);
 err:
 	return rc;
 }

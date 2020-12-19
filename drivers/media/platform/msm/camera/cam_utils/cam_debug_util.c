@@ -30,7 +30,7 @@ const char *cam_get_module_name(unsigned int module_id)
 		name = "CAM-CORE";
 		break;
 	case CAM_CRM:
-		name = "CAM-CRM";
+		name = "CAM_CRM";
 		break;
 	case CAM_CPAS:
 		name = "CAM-CPAS";

@@ -13,9 +13,6 @@
 #ifndef _CAM_HW_MGR_INTF_H_
 #define _CAM_HW_MGR_INTF_H_
 
-#include <linux/time.h>
-#include <linux/types.h>
-
 /*
  * This file declares Constants, Enums, Structures and APIs to be used as
  * Interface between HW Manager and Context.
@@ -32,10 +29,6 @@
 typedef int (*cam_hw_event_cb_func)(void *context, uint32_t evt_id,
 	void *evt_data);
 
-/* hardware page fault callback function type */
-typedef int (*cam_hw_pagefault_cb_func)(void *context, unsigned long iova,
-	uint32_t buf_info);
-
 /**
  * struct cam_hw_update_entry - Entry for hardware config
  *
@@ -51,7 +44,7 @@ struct cam_hw_update_entry {
 	uint32_t           offset;
 	uint32_t           len;
 	uint32_t           flags;
-	uintptr_t          addr;
+	uint64_t           addr;
 };
 
 /**
@@ -167,12 +160,10 @@ struct cam_hw_mgr_dump_pf_data {
  * @in_map_entries:        Actual input fence mapping list (returned)
  * @num_in_map_entries:    Number of acutal input fence mapping (returned)
  * @priv:                  Private pointer of hw update
- * @pf_data:               Debug data for page fault
  *
  */
 struct cam_hw_prepare_update_args {
 	struct cam_packet              *packet;
-	size_t                          remain_len;
 	void                           *ctxt_to_hw_map;
 	uint32_t                        max_hw_update_entries;
 	struct cam_hw_update_entry     *hw_update_entries;
@@ -184,7 +175,6 @@ struct cam_hw_prepare_update_args {
 	struct cam_hw_fence_map_entry  *in_map_entries;
 	uint32_t                        num_in_map_entries;
 	void                           *priv;
-	struct cam_hw_mgr_dump_pf_data *pf_data;
 };
 
 /**

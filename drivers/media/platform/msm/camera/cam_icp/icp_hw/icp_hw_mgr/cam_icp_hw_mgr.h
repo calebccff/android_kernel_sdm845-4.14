@@ -1,4 +1,4 @@
-/* Copyright (c) 2017-2019, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2017-2018, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -85,9 +85,6 @@
  * @sec_heap: Memory info of secondary heap
  * @fw_buf: Memory info of firmware
  * @qdss_buf: Memory info of qdss
- * @sfr_buf: Memory info for sfr buffer
- * @shmem: Memory info for shared region
- * @io_mem: Memory info for io region
  */
 struct icp_hfi_mem_info {
 	struct cam_mem_mgr_memory_desc qtbl;
@@ -97,9 +94,7 @@ struct icp_hfi_mem_info {
 	struct cam_mem_mgr_memory_desc sec_heap;
 	struct cam_mem_mgr_memory_desc fw_buf;
 	struct cam_mem_mgr_memory_desc qdss_buf;
-	struct cam_mem_mgr_memory_desc sfr_buf;
 	struct cam_smmu_region_info shmem;
-	struct cam_smmu_region_info io_mem;
 };
 
 /**
@@ -218,7 +213,6 @@ struct cam_ctx_clk_info {
  * @clk_info: Current clock info of a context
  * @watch_dog: watchdog timer handle
  * @watch_dog_reset_counter: Counter for watch dog reset
- * @icp_dev_io_info: io config resource
  */
 struct cam_icp_hw_ctx_data {
 	void *context_priv;
@@ -314,7 +308,6 @@ struct cam_icp_clk_info {
  * @a5_jtag_debug: entry to enable A5 JTAG debugging
  * @a5_debug_type : entry to enable FW debug message/qdss
  * @a5_dbg_lvl : debug level set to FW.
- * @a5_fw_dump_lvl : level set for dumping the FW data
  * @ipe0_enable: Flag for IPE0
  * @ipe1_enable: Flag for IPE1
  * @bps_enable: Flag for BPS
@@ -324,9 +317,6 @@ struct cam_icp_clk_info {
  * @bps_dev_intf: Device interface for BPS
  * @ipe_clk_state: IPE clock state flag
  * @bps_clk_state: BPS clock state flag
- * @recovery: Flag to validate if in previous session FW
- *            reported a fatal error or wdt. If set FW is
- *            re-downloaded for new camera session.
  */
 struct cam_icp_hw_mgr {
 	struct mutex hw_mgr_mutex;
@@ -363,7 +353,6 @@ struct cam_icp_hw_mgr {
 	bool a5_jtag_debug;
 	u64 a5_debug_type;
 	u64 a5_dbg_lvl;
-	u64 a5_fw_dump_lvl;
 	bool ipe0_enable;
 	bool ipe1_enable;
 	bool bps_enable;

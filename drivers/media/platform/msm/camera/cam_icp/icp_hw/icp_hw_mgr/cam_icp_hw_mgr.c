@@ -50,15 +50,12 @@
 #include "cam_soc_util.h"
 #include "cam_trace.h"
 #include "cam_cpas_api.h"
-#include "cam_common_util.h"
 
 #define ICP_WORKQ_TASK_CMD_TYPE 1
 #define ICP_WORKQ_TASK_MSG_TYPE 2
 
 #define ICP_DEV_TYPE_TO_CLK_TYPE(dev_type) \
 	((dev_type == CAM_ICP_RES_TYPE_BPS) ? ICP_CLK_HW_BPS : ICP_CLK_HW_IPE)
-
-#define ICP_DEVICE_IDLE_TIMEOUT 400
 
 static struct cam_icp_hw_mgr icp_hw_mgr;
 
@@ -339,16 +336,14 @@ static int32_t cam_icp_deinit_idle_clk(void *priv, void *data)
 	clk_info->base_clk = 0;
 	clk_info->curr_clk = 0;
 	clk_info->over_clked = 0;
-
 	mutex_lock(&hw_mgr->hw_mgr_mutex);
 
 	for (i = 0; i < CAM_ICP_CTX_MAX; i++) {
 		ctx_data = &hw_mgr->ctx_data[i];
 		mutex_lock(&ctx_data->ctx_mutex);
 		if ((ctx_data->state == CAM_ICP_CTX_STATE_ACQUIRED) &&
-			(ICP_DEV_TYPE_TO_CLK_TYPE(
-			ctx_data->icp_dev_acquire_info->dev_type)
-			== clk_info->hw_type)) {
+			(ICP_DEV_TYPE_TO_CLK_TYPE(ctx_data->
+			icp_dev_acquire_info->dev_type) == clk_info->hw_type)) {
 			busy = cam_icp_frame_pending(ctx_data);
 			if (busy) {
 				mutex_unlock(&ctx_data->ctx_mutex);
@@ -358,7 +353,6 @@ static int32_t cam_icp_deinit_idle_clk(void *priv, void *data)
 		}
 		mutex_unlock(&ctx_data->ctx_mutex);
 	}
-
 	if (busy) {
 		cam_icp_device_timer_reset(hw_mgr, clk_info->hw_type);
 		rc = -EBUSY;
@@ -397,8 +391,8 @@ static int32_t cam_icp_deinit_idle_clk(void *priv, void *data)
 				sizeof(struct cam_a5_clk_update_cmd));
 
 done:
-	mutex_unlock(&hw_mgr->hw_mgr_mutex);
-	return rc;
+		mutex_unlock(&hw_mgr->hw_mgr_mutex);
+		return rc;
 }
 
 static int32_t cam_icp_ctx_timer(void *priv, void *data)
@@ -428,7 +422,6 @@ static int32_t cam_icp_ctx_timer(void *priv, void *data)
 		mutex_unlock(&ctx_data->ctx_mutex);
 		return 0;
 	}
-
 	if (cam_icp_frame_pending(ctx_data)) {
 		cam_icp_ctx_timer_reset(ctx_data);
 		mutex_unlock(&ctx_data->ctx_mutex);
@@ -479,8 +472,8 @@ static int32_t cam_icp_ctx_timer(void *priv, void *data)
 	ctx_data->clk_info.base_clk = 0;
 
 	clk_update.ahb_vote.type = CAM_VOTE_DYNAMIC;
-	clk_update.ahb_vote.vote.freq = 0;
-	clk_update.ahb_vote_valid = false;
+	clk_update.ahb_vote.vote.freq = clk_info->curr_clk;
+	clk_update.ahb_vote_valid = true;
 	clk_update.axi_vote.compressed_bw = clk_info->compressed_bw;
 	clk_update.axi_vote.compressed_bw_ab = clk_info->compressed_bw;
 	clk_update.axi_vote.uncompressed_bw = clk_info->uncompressed_bw;
@@ -593,7 +586,7 @@ static int cam_icp_device_timer_start(struct cam_icp_hw_mgr *hw_mgr)
 	for (i = 0; i < ICP_CLK_HW_MAX; i++)  {
 		if (!hw_mgr->clk_info[i].watch_dog) {
 			rc = crm_timer_init(&hw_mgr->clk_info[i].watch_dog,
-				ICP_DEVICE_IDLE_TIMEOUT, &hw_mgr->clk_info[i],
+				3000, &hw_mgr->clk_info[i],
 				&cam_icp_device_timer_cb);
 
 			if (rc)
@@ -1042,8 +1035,6 @@ static int cam_icp_update_clk_rate(struct cam_icp_hw_mgr *hw_mgr,
 		id = CAM_ICP_IPE_CMD_UPDATE_CLK;
 	}
 
-	CAM_DBG(CAM_PERF, "clk_rate %u for dev_type %d", curr_clk_rate,
-		ctx_data->icp_dev_acquire_info->dev_type);
 	clk_upd_cmd.curr_clk_rate = curr_clk_rate;
 	clk_upd_cmd.ipe_bps_pc_enable = icp_hw_mgr.ipe_bps_pc_flag;
 
@@ -1091,8 +1082,8 @@ static int cam_icp_update_cpas_vote(struct cam_icp_hw_mgr *hw_mgr,
 	}
 
 	clk_update.ahb_vote.type = CAM_VOTE_DYNAMIC;
-	clk_update.ahb_vote.vote.freq = 0;
-	clk_update.ahb_vote_valid = false;
+	clk_update.ahb_vote.vote.freq = clk_info->curr_clk;
+	clk_update.ahb_vote_valid = true;
 	clk_update.axi_vote.compressed_bw = clk_info->compressed_bw;
 	clk_update.axi_vote.compressed_bw_ab = clk_info->compressed_bw;
 	clk_update.axi_vote.uncompressed_bw = clk_info->uncompressed_bw;
@@ -1376,22 +1367,6 @@ static int cam_icp_get_a5_dbg_type(void *data, u64 *val)
 DEFINE_SIMPLE_ATTRIBUTE(cam_icp_debug_type_fs, cam_icp_get_a5_dbg_type,
 	cam_icp_set_a5_dbg_type, "%08llu");
 
-static int cam_icp_set_a5_fw_dump_lvl(void *data, u64 val)
-{
-	if (val < NUM_HFI_DUMP_LVL)
-		icp_hw_mgr.a5_fw_dump_lvl = val;
-	return 0;
-}
-
-static int cam_icp_get_a5_fw_dump_lvl(void *data, u64 *val)
-{
-	*val = icp_hw_mgr.a5_fw_dump_lvl;
-	return 0;
-}
-
-DEFINE_SIMPLE_ATTRIBUTE(cam_icp_debug_fw_dump, cam_icp_get_a5_fw_dump_lvl,
-	cam_icp_set_a5_fw_dump_lvl, "%08llu");
-
 static int cam_icp_hw_mgr_create_debugfs_entry(void)
 {
 	int rc = 0;
@@ -1408,6 +1383,7 @@ static int cam_icp_hw_mgr_create_debugfs_entry(void)
 		rc = -ENOMEM;
 		goto err;
 	}
+	icp_hw_mgr.icp_pc_flag = false;
 
 	if (!debugfs_create_bool("ipe_bps_pc",
 		0644,
@@ -1417,6 +1393,8 @@ static int cam_icp_hw_mgr_create_debugfs_entry(void)
 		rc = -ENOMEM;
 		goto err;
 	}
+
+	icp_hw_mgr.ipe_bps_pc_flag = false;
 
 	if (!debugfs_create_file("icp_debug_clk",
 		0644,
@@ -1439,7 +1417,7 @@ static int cam_icp_hw_mgr_create_debugfs_entry(void)
 		0644,
 		icp_hw_mgr.dentry,
 		NULL, &cam_icp_debug_type_fs)) {
-		CAM_ERR(CAM_ICP, "failed to create a5_debug_type");
+		CAM_ERR(CAM_ICP, "failed to create a5_debug_type\n");
 		rc = -ENOMEM;
 		goto err;
 	}
@@ -1448,16 +1426,7 @@ static int cam_icp_hw_mgr_create_debugfs_entry(void)
 		0644,
 		icp_hw_mgr.dentry,
 		NULL, &cam_icp_debug_fs)) {
-		CAM_ERR(CAM_ICP, "failed to create a5_dbg_lvl");
-		rc = -ENOMEM;
-		goto err;
-	}
-
-	if (!debugfs_create_file("a5_fw_dump_lvl",
-		0644,
-		icp_hw_mgr.dentry,
-		NULL, &cam_icp_debug_fw_dump)) {
-		CAM_ERR(CAM_ICP, "failed to create a5_fw_dump_lvl");
+		CAM_ERR(CAM_ICP, "failed to create a5_dbg_lvl\n");
 		rc = -ENOMEM;
 		goto err;
 	}
@@ -1465,7 +1434,6 @@ static int cam_icp_hw_mgr_create_debugfs_entry(void)
 	return rc;
 err:
 	debugfs_remove_recursive(icp_hw_mgr.dentry);
-	icp_hw_mgr.dentry = NULL;
 	return rc;
 }
 
@@ -1560,10 +1528,6 @@ static int cam_icp_mgr_handle_frame_process(uint32_t *msg_ptr, int flag)
 		"ctx_id : %u, request_id :%lld dev_type: %d",
 		ctx_data->ctx_id, request_id,
 		ctx_data->icp_dev_acquire_info->dev_type);
-
-	clk_type = ICP_DEV_TYPE_TO_CLK_TYPE(
-			ctx_data->icp_dev_acquire_info->dev_type);
-	cam_icp_device_timer_reset(&icp_hw_mgr, clk_type);
 
 	hfi_frame_process = &ctx_data->hfi_frame_process;
 	for (i = 0; i < CAM_FRAME_CMD_MAX; i++)
@@ -1725,8 +1689,8 @@ static int cam_icp_mgr_process_msg_config_io(uint32_t *msg_ptr)
 				ioconfig_ack->err_type));
 			return -EIO;
 		}
-		ctx_data = (struct cam_icp_hw_ctx_data *)
-			U64_TO_PTR(ioconfig_ack->user_data1);
+		ctx_data =
+			(struct cam_icp_hw_ctx_data *)ioconfig_ack->user_data1;
 		if (!ctx_data) {
 			CAM_ERR(CAM_ICP, "wrong ctx data from IPE response");
 			return -EINVAL;
@@ -1740,8 +1704,8 @@ static int cam_icp_mgr_process_msg_config_io(uint32_t *msg_ptr)
 				bps_config_ack->rc, ioconfig_ack->opcode);
 			return -EIO;
 		}
-		ctx_data = (struct cam_icp_hw_ctx_data *)
-			U64_TO_PTR(ioconfig_ack->user_data1);
+		ctx_data =
+			(struct cam_icp_hw_ctx_data *)ioconfig_ack->user_data1;
 		if (!ctx_data) {
 			CAM_ERR(CAM_ICP, "wrong ctx data from BPS response");
 			return -EINVAL;
@@ -1764,9 +1728,7 @@ static int cam_icp_mgr_process_msg_create_handle(uint32_t *msg_ptr)
 		return -EINVAL;
 	}
 
-	ctx_data =
-		(struct cam_icp_hw_ctx_data *)(uintptr_t)
-		create_handle_ack->user_data1;
+	ctx_data = (struct cam_icp_hw_ctx_data *)create_handle_ack->user_data1;
 	if (!ctx_data) {
 		CAM_ERR(CAM_ICP, "Invalid ctx_data");
 		return -EINVAL;
@@ -1797,8 +1759,7 @@ static int cam_icp_mgr_process_msg_ping_ack(uint32_t *msg_ptr)
 		return -EINVAL;
 	}
 
-	ctx_data = (struct cam_icp_hw_ctx_data *)
-		U64_TO_PTR(ping_ack->user_data);
+	ctx_data = (struct cam_icp_hw_ctx_data *)ping_ack->user_data;
 	if (!ctx_data) {
 		CAM_ERR(CAM_ICP, "Invalid ctx_data");
 		return -EINVAL;
@@ -1862,8 +1823,8 @@ static int cam_icp_mgr_process_direct_ack_msg(uint32_t *msg_ptr)
 	case HFI_IPEBPS_CMD_OPCODE_IPE_ABORT:
 	case HFI_IPEBPS_CMD_OPCODE_BPS_ABORT:
 		ioconfig_ack = (struct hfi_msg_ipebps_async_ack *)msg_ptr;
-		ctx_data = (struct cam_icp_hw_ctx_data *)
-			U64_TO_PTR(ioconfig_ack->user_data1);
+		ctx_data =
+			(struct cam_icp_hw_ctx_data *)ioconfig_ack->user_data1;
 		if (ctx_data->state != CAM_ICP_CTX_STATE_FREE)
 			complete(&ctx_data->wait_complete);
 		CAM_DBG(CAM_ICP, "received IPE/BPS/ ABORT: ctx_state =%d",
@@ -1872,8 +1833,8 @@ static int cam_icp_mgr_process_direct_ack_msg(uint32_t *msg_ptr)
 	case HFI_IPEBPS_CMD_OPCODE_IPE_DESTROY:
 	case HFI_IPEBPS_CMD_OPCODE_BPS_DESTROY:
 		ioconfig_ack = (struct hfi_msg_ipebps_async_ack *)msg_ptr;
-		ctx_data = (struct cam_icp_hw_ctx_data *)
-			U64_TO_PTR(ioconfig_ack->user_data1);
+		ctx_data =
+			(struct cam_icp_hw_ctx_data *)ioconfig_ack->user_data1;
 		if ((ctx_data->state == CAM_ICP_CTX_STATE_RELEASE) ||
 			(ctx_data->state == CAM_ICP_CTX_STATE_IN_USE)) {
 			complete(&ctx_data->wait_complete);
@@ -2102,10 +2063,6 @@ static int cam_icp_process_msg_pkt_type(
 		CAM_DBG(CAM_ICP, "received EVENT_NOTIFY");
 		size_processed = (
 			(struct hfi_msg_event_notify *)msg_ptr)->size;
-		rc = cam_icp_mgr_process_fatal_error(hw_mgr, msg_ptr);
-		if (rc)
-			CAM_ERR(CAM_ICP, "failed in processing evt notify");
-
 		break;
 
 	default:
@@ -2137,7 +2094,7 @@ static int32_t cam_icp_mgr_process_msg(void *priv, void *data)
 
 	rc = hfi_read_message(icp_hw_mgr.msg_buf, Q_MSG, &read_len);
 	if (rc) {
-		CAM_DBG(CAM_ICP, "Unable to read msg q rc %d", rc);
+		CAM_DBG(CAM_ICP, "Unable to read msg q");
 	} else {
 		read_len = read_len << BYTE_WORD_SHIFT;
 		msg_ptr = (uint32_t *)icp_hw_mgr.msg_buf;
@@ -2164,13 +2121,6 @@ static int32_t cam_icp_mgr_process_msg(void *priv, void *data)
 
 	cam_icp_mgr_process_dbg_buf(icp_hw_mgr.a5_dbg_lvl);
 
-	if ((task_data->irq_status & A5_WDT_0) ||
-		(task_data->irq_status & A5_WDT_1)) {
-		CAM_ERR_RATE_LIMIT(CAM_ICP, "watch dog interrupt from A5");
-
-		rc = cam_icp_mgr_trigger_recovery(hw_mgr);
-	}
-
 	return rc;
 }
 
@@ -2181,11 +2131,6 @@ int32_t cam_icp_hw_mgr_cb(uint32_t irq_status, void *data)
 	struct cam_icp_hw_mgr *hw_mgr = data;
 	struct crm_workq_task *task;
 	struct hfi_msg_work_data *task_data;
-
-	if (!data) {
-		CAM_ERR(CAM_ICP, "irq cb data is NULL");
-		return rc;
-	}
 
 	spin_lock_irqsave(&hw_mgr->hw_mgr_lock, flags);
 	task = cam_req_mgr_workq_get_task(icp_hw_mgr.msg_work);
@@ -2221,7 +2166,6 @@ static void cam_icp_free_hfi_mem(void)
 	cam_mem_mgr_release_mem(&icp_hw_mgr.hfi_mem.cmd_q);
 	cam_mem_mgr_release_mem(&icp_hw_mgr.hfi_mem.msg_q);
 	cam_mem_mgr_release_mem(&icp_hw_mgr.hfi_mem.dbg_q);
-	cam_mem_mgr_release_mem(&icp_hw_mgr.hfi_mem.sfr_buf);
 }
 
 static int cam_icp_alloc_secheap_mem(struct cam_mem_mgr_memory_desc *secheap)
@@ -2261,31 +2205,6 @@ static int cam_icp_alloc_secheap_mem(struct cam_mem_mgr_memory_desc *secheap)
 	return rc;
 }
 
-static int cam_icp_alloc_sfr_mem(struct cam_mem_mgr_memory_desc *sfr)
-{
-	int rc;
-	struct cam_mem_mgr_request_desc alloc;
-	struct cam_mem_mgr_memory_desc out;
-
-	memset(&alloc, 0, sizeof(alloc));
-	memset(&out, 0, sizeof(out));
-	alloc.size = SZ_8K;
-	alloc.align = 0;
-	alloc.flags = CAM_MEM_FLAG_HW_READ_WRITE |
-		CAM_MEM_FLAG_HW_SHARED_ACCESS;
-
-	alloc.smmu_hdl = icp_hw_mgr.iommu_hdl;
-	rc = cam_mem_mgr_request_mem(&alloc, &out);
-	if (rc)
-		return rc;
-
-	*sfr = out;
-	CAM_DBG(CAM_ICP, "kva: %llX, iova: %x, hdl: %x, len: %lld",
-		out.kva, out.iova, out.mem_handle, out.len);
-
-	return rc;
-}
-
 static int cam_icp_alloc_shared_mem(struct cam_mem_mgr_memory_desc *qtbl)
 {
 	int rc;
@@ -2313,7 +2232,7 @@ static int cam_icp_alloc_shared_mem(struct cam_mem_mgr_memory_desc *qtbl)
 static int cam_icp_allocate_fw_mem(void)
 {
 	int rc;
-	uintptr_t kvaddr;
+	uint64_t kvaddr;
 	size_t len;
 	dma_addr_t iova;
 
@@ -2327,7 +2246,7 @@ static int cam_icp_allocate_fw_mem(void)
 	icp_hw_mgr.hfi_mem.fw_buf.iova = iova;
 	icp_hw_mgr.hfi_mem.fw_buf.smmu_hdl = icp_hw_mgr.iommu_hdl;
 
-	CAM_DBG(CAM_ICP, "kva: %zX, iova: %llx, len: %zu",
+	CAM_DBG(CAM_ICP, "kva: %llX, iova: %llx, len: %zu",
 		kvaddr, iova, len);
 
 	return rc;
@@ -2347,25 +2266,6 @@ static int cam_icp_allocate_qdss_mem(void)
 	icp_hw_mgr.hfi_mem.qdss_buf.len = len;
 	icp_hw_mgr.hfi_mem.qdss_buf.iova = iova;
 	icp_hw_mgr.hfi_mem.qdss_buf.smmu_hdl = icp_hw_mgr.iommu_hdl;
-
-	CAM_DBG(CAM_ICP, "iova: %llx, len: %zu", iova, len);
-
-	return rc;
-}
-
-static int cam_icp_get_io_mem_info(void)
-{
-	int rc;
-	size_t len;
-	dma_addr_t iova;
-
-	rc = cam_smmu_get_io_region_info(icp_hw_mgr.iommu_hdl,
-		&iova, &len);
-	if (rc)
-		return rc;
-
-	icp_hw_mgr.hfi_mem.io_mem.iova_len = len;
-	icp_hw_mgr.hfi_mem.io_mem.iova_start = iova;
 
 	CAM_DBG(CAM_ICP, "iova: %llx, len: %zu", iova, len);
 
@@ -2420,30 +2320,14 @@ static int cam_icp_allocate_hfi_mem(void)
 		goto dbg_q_alloc_failed;
 	}
 
-	rc = cam_icp_alloc_sfr_mem(&icp_hw_mgr.hfi_mem.sfr_buf);
-	if (rc) {
-		CAM_ERR(CAM_ICP, "Unable to allocate sfr buffer");
-		goto sfr_buf_alloc_failed;
-	}
-
 	rc = cam_icp_alloc_secheap_mem(&icp_hw_mgr.hfi_mem.sec_heap);
 	if (rc) {
 		CAM_ERR(CAM_ICP, "Unable to allocate sec heap memory");
 		goto sec_heap_alloc_failed;
 	}
 
-	rc = cam_icp_get_io_mem_info();
-	if (rc) {
-		CAM_ERR(CAM_ICP, "Unable to get I/O region info");
-		goto get_io_mem_failed;
-	}
-
 	return rc;
-get_io_mem_failed:
-	cam_mem_mgr_free_memory_region(&icp_hw_mgr.hfi_mem.sec_heap);
 sec_heap_alloc_failed:
-	cam_mem_mgr_release_mem(&icp_hw_mgr.hfi_mem.sfr_buf);
-sfr_buf_alloc_failed:
 	cam_mem_mgr_release_mem(&icp_hw_mgr.hfi_mem.dbg_q);
 dbg_q_alloc_failed:
 	cam_mem_mgr_release_mem(&icp_hw_mgr.hfi_mem.msg_q);
@@ -2548,7 +2432,6 @@ static int cam_icp_mgr_hw_close_u(void *hw_priv, void *hw_close_args)
 	struct cam_icp_hw_mgr *hw_mgr = hw_priv;
 	int rc = 0;
 
-	CAM_DBG(CAM_ICP, "UMD calls close");
 	if (!hw_mgr) {
 		CAM_ERR(CAM_ICP, "Null hw mgr");
 		return 0;
@@ -2565,7 +2448,6 @@ static int cam_icp_mgr_hw_close_k(void *hw_priv, void *hw_close_args)
 {
 	struct cam_icp_hw_mgr *hw_mgr = hw_priv;
 
-	CAM_DBG(CAM_ICP, "KMD calls close");
 	if (!hw_mgr) {
 		CAM_ERR(CAM_ICP, "Null hw mgr");
 		return 0;
@@ -2622,33 +2504,26 @@ static int cam_icp_mgr_hfi_resume(struct cam_icp_hw_mgr *hw_mgr)
 	hfi_mem.qtbl.kva = icp_hw_mgr.hfi_mem.qtbl.kva;
 	hfi_mem.qtbl.iova = icp_hw_mgr.hfi_mem.qtbl.iova;
 	hfi_mem.qtbl.len = icp_hw_mgr.hfi_mem.qtbl.len;
-	 CAM_DBG(CAM_ICP, "qtbl kva = %llX IOVA = %X length = %lld\n",
+	 CAM_DBG(CAM_ICP, "kva = %llX IOVA = %X length = %lld\n",
 		hfi_mem.qtbl.kva, hfi_mem.qtbl.iova, hfi_mem.qtbl.len);
 
 	hfi_mem.cmd_q.kva = icp_hw_mgr.hfi_mem.cmd_q.kva;
 	hfi_mem.cmd_q.iova = icp_hw_mgr.hfi_mem.cmd_q.iova;
 	hfi_mem.cmd_q.len = icp_hw_mgr.hfi_mem.cmd_q.len;
-	CAM_DBG(CAM_ICP, "cmd_q kva = %llX IOVA = %X length = %lld\n",
+	CAM_DBG(CAM_ICP, "kva = %llX IOVA = %X length = %lld\n",
 		hfi_mem.cmd_q.kva, hfi_mem.cmd_q.iova, hfi_mem.cmd_q.len);
 
 	hfi_mem.msg_q.kva = icp_hw_mgr.hfi_mem.msg_q.kva;
 	hfi_mem.msg_q.iova = icp_hw_mgr.hfi_mem.msg_q.iova;
 	hfi_mem.msg_q.len = icp_hw_mgr.hfi_mem.msg_q.len;
-	CAM_DBG(CAM_ICP, "msg_q kva = %llX IOVA = %X length = %lld\n",
+	CAM_DBG(CAM_ICP, "kva = %llX IOVA = %X length = %lld\n",
 		hfi_mem.msg_q.kva, hfi_mem.msg_q.iova, hfi_mem.msg_q.len);
 
 	hfi_mem.dbg_q.kva = icp_hw_mgr.hfi_mem.dbg_q.kva;
 	hfi_mem.dbg_q.iova = icp_hw_mgr.hfi_mem.dbg_q.iova;
 	hfi_mem.dbg_q.len = icp_hw_mgr.hfi_mem.dbg_q.len;
-	CAM_DBG(CAM_ICP, "dbg_q kva = %llX IOVA = %X length = %lld\n",
+	CAM_DBG(CAM_ICP, "kva = %llX IOVA = %X length = %lld\n",
 		hfi_mem.dbg_q.kva, hfi_mem.dbg_q.iova, hfi_mem.dbg_q.len);
-
-	hfi_mem.sfr_buf.kva = icp_hw_mgr.hfi_mem.sfr_buf.kva;
-	hfi_mem.sfr_buf.iova = icp_hw_mgr.hfi_mem.sfr_buf.iova;
-	hfi_mem.sfr_buf.len = icp_hw_mgr.hfi_mem.sfr_buf.len;
-	CAM_DBG(CAM_ICP, "sfr kva = %llX IOVA = %X length = %lld\n",
-		hfi_mem.sfr_buf.kva, hfi_mem.sfr_buf.iova,
-		hfi_mem.sfr_buf.len);
 
 	hfi_mem.sec_heap.kva = icp_hw_mgr.hfi_mem.sec_heap.kva;
 	hfi_mem.sec_heap.iova = icp_hw_mgr.hfi_mem.sec_heap.iova;
@@ -2659,14 +2534,6 @@ static int cam_icp_mgr_hfi_resume(struct cam_icp_hw_mgr *hw_mgr)
 
 	hfi_mem.qdss.iova = icp_hw_mgr.hfi_mem.qdss_buf.iova;
 	hfi_mem.qdss.len = icp_hw_mgr.hfi_mem.qdss_buf.len;
-
-	hfi_mem.io_mem.iova = icp_hw_mgr.hfi_mem.io_mem.iova_start;
-	hfi_mem.io_mem.len = icp_hw_mgr.hfi_mem.io_mem.iova_len;
-
-	CAM_DBG(CAM_ICP, "IO region IOVA = %X length = %lld",
-			hfi_mem.io_mem.iova,
-			hfi_mem.io_mem.len);
-
 	return cam_hfi_resume(&hfi_mem,
 		a5_dev->soc_info.reg_map[A5_SIERRA_BASE].mem_base,
 		hw_mgr->a5_jtag_debug);
@@ -2702,10 +2569,16 @@ static int cam_icp_mgr_abort_handle(
 	reinit_completion(&ctx_data->wait_complete);
 	abort_cmd->num_fw_handles = 1;
 	abort_cmd->fw_handles[0] = ctx_data->fw_handle;
-	abort_cmd->user_data1 = PTR_TO_U64(ctx_data);
+	abort_cmd->user_data1 = (uint64_t)ctx_data;
 	abort_cmd->user_data2 = (uint64_t)0x0;
 
-	rc = hfi_write_cmd(abort_cmd);
+	task_data = (struct hfi_cmd_work_data *)task->payload;
+	task_data->data = (void *)abort_cmd;
+	task_data->request_id = 0;
+	task_data->type = ICP_WORKQ_TASK_CMD_TYPE;
+	task->process_cb = cam_icp_mgr_process_cmd;
+	rc = cam_req_mgr_workq_enqueue_task(task, &icp_hw_mgr,
+		CRM_TASK_PRIORITY_0);
 	if (rc) {
 		kfree(abort_cmd);
 		return rc;
@@ -2732,7 +2605,13 @@ static int cam_icp_mgr_destroy_handle(
 	int timeout = 1000;
 	unsigned long rem_jiffies;
 	size_t packet_size;
+	struct hfi_cmd_work_data *task_data;
 	struct hfi_cmd_ipebps_async *destroy_cmd;
+	struct crm_workq_task *task;
+
+	task = cam_req_mgr_workq_get_task(icp_hw_mgr.cmd_work);
+	if (!task)
+		return -ENOMEM;
 
 	packet_size =
 		sizeof(struct hfi_cmd_ipebps_async) +
@@ -2754,12 +2633,18 @@ static int cam_icp_mgr_destroy_handle(
 	reinit_completion(&ctx_data->wait_complete);
 	destroy_cmd->num_fw_handles = 1;
 	destroy_cmd->fw_handles[0] = ctx_data->fw_handle;
-	destroy_cmd->user_data1 = PTR_TO_U64(ctx_data);
+	destroy_cmd->user_data1 = (uint64_t)ctx_data;
 	destroy_cmd->user_data2 = (uint64_t)0x0;
 	memcpy(destroy_cmd->payload.direct, &ctx_data->temp_payload,
 		sizeof(uint64_t));
 
-	rc = hfi_write_cmd(destroy_cmd);
+	task_data = (struct hfi_cmd_work_data *)task->payload;
+	task_data->data = (void *)destroy_cmd;
+	task_data->request_id = 0;
+	task_data->type = ICP_WORKQ_TASK_CMD_TYPE;
+	task->process_cb = cam_icp_mgr_process_cmd;
+	rc = cam_req_mgr_workq_enqueue_task(task, &icp_hw_mgr,
+		CRM_TASK_PRIORITY_0);
 	if (rc) {
 		kfree(destroy_cmd);
 		return rc;
@@ -3033,10 +2918,6 @@ static int cam_icp_mgr_hfi_init(struct cam_icp_hw_mgr *hw_mgr)
 	hfi_mem.dbg_q.iova = icp_hw_mgr.hfi_mem.dbg_q.iova;
 	hfi_mem.dbg_q.len = icp_hw_mgr.hfi_mem.dbg_q.len;
 
-	hfi_mem.sfr_buf.kva = icp_hw_mgr.hfi_mem.sfr_buf.kva;
-	hfi_mem.sfr_buf.iova = icp_hw_mgr.hfi_mem.sfr_buf.iova;
-	hfi_mem.sfr_buf.len = icp_hw_mgr.hfi_mem.sfr_buf.len;
-
 	hfi_mem.sec_heap.kva = icp_hw_mgr.hfi_mem.sec_heap.kva;
 	hfi_mem.sec_heap.iova = icp_hw_mgr.hfi_mem.sec_heap.iova;
 	hfi_mem.sec_heap.len = icp_hw_mgr.hfi_mem.sec_heap.len;
@@ -3046,9 +2927,6 @@ static int cam_icp_mgr_hfi_init(struct cam_icp_hw_mgr *hw_mgr)
 
 	hfi_mem.qdss.iova = icp_hw_mgr.hfi_mem.qdss_buf.iova;
 	hfi_mem.qdss.len = icp_hw_mgr.hfi_mem.qdss_buf.len;
-
-	hfi_mem.io_mem.iova = icp_hw_mgr.hfi_mem.io_mem.iova_start;
-	hfi_mem.io_mem.len = icp_hw_mgr.hfi_mem.io_mem.iova_len;
 
 	return cam_hfi_init(0, &hfi_mem,
 		a5_dev->soc_info.reg_map[A5_SIERRA_BASE].mem_base,
@@ -3850,7 +3728,6 @@ static int cam_icp_process_stream_settings(
 	if (!rem_jiffies) {
 		rc = -ETIMEDOUT;
 		CAM_ERR(CAM_ICP, "FW response timed out %d", rc);
-		cam_hfi_queue_dump();
 	}
 
 end:
@@ -3868,9 +3745,7 @@ static int cam_icp_packet_generic_blob_handler(void *user_data,
 	struct icp_cmd_generic_blob *blob;
 	struct cam_icp_hw_ctx_data *ctx_data;
 	uint32_t index;
-	size_t io_buf_size;
 	int rc = 0;
-	uintptr_t pResource;
 
 	if (!blob_data || (blob_size == 0)) {
 		CAM_ERR(CAM_ICP, "Invalid blob info %pK %d", blob_data,
@@ -3974,7 +3849,6 @@ static int cam_icp_process_generic_cmd_buffer(
 
 	cmd_generic_blob.ctx = ctx_data;
 	cmd_generic_blob.frame_info_idx = index;
-	cmd_generic_blob.io_buf_addr = io_buf_addr;
 
 	cmd_desc = (struct cam_cmd_buf_desc *)
 		((uint32_t *) &packet->payload + packet->cmd_buf_offset/4);
@@ -3994,28 +3868,6 @@ static int cam_icp_process_generic_cmd_buffer(
 	return rc;
 }
 
-static int cam_icp_mgr_process_cfg_io_cmd(
-	struct cam_icp_hw_ctx_data *ctx_data,
-	struct hfi_cmd_ipebps_async *ioconfig_cmd,
-	uint64_t request_id,
-	uint64_t io_config)
-{
-	ioconfig_cmd->size = sizeof(struct hfi_cmd_ipebps_async);
-	ioconfig_cmd->pkt_type = HFI_CMD_IPEBPS_ASYNC_COMMAND_INDIRECT;
-	if (ctx_data->icp_dev_acquire_info->dev_type == CAM_ICP_RES_TYPE_BPS)
-		ioconfig_cmd->opcode = HFI_IPEBPS_CMD_OPCODE_BPS_CONFIG_IO;
-	else
-		ioconfig_cmd->opcode = HFI_IPEBPS_CMD_OPCODE_IPE_CONFIG_IO;
-
-	ioconfig_cmd->num_fw_handles = 1;
-	ioconfig_cmd->fw_handles[0] = ctx_data->fw_handle;
-	ioconfig_cmd->payload.indirect = io_config;
-	ioconfig_cmd->user_data1 = PTR_TO_U64(ctx_data);
-	ioconfig_cmd->user_data2 = request_id;
-
-	return 0;
-}
-
 static int cam_icp_mgr_update_hfi_frame_process(
 	struct cam_icp_hw_ctx_data *ctx_data,
 	struct cam_packet *packet,
@@ -4023,7 +3875,6 @@ static int cam_icp_mgr_update_hfi_frame_process(
 	int32_t *idx)
 {
 	int32_t index, rc;
-	struct hfi_cmd_ipebps_async *hfi_cmd = NULL;
 
 	index = find_first_zero_bit(ctx_data->hfi_frame_process.bitmap,
 		ctx_data->hfi_frame_process.bits);
@@ -4237,10 +4088,7 @@ static int cam_icp_mgr_prepare_hw_update(void *hw_mgr_priv,
 		return rc;
 	}
 
-	prepare_args->pf_data->packet = packet;
-
-	CAM_DBG(CAM_REQ, "req id = %lld for ctx = %u",
-		packet->header.request_id, ctx_data->ctx_id);
+	CAM_DBG(CAM_ICP, "E: req id = %lld", packet->header.request_id);
 	/* Update Buffer Address from handles and patch information */
 	rc = cam_packet_util_process_patches(packet, hw_mgr->iommu_hdl,
 		hw_mgr->iommu_sec_hdl, 0);
@@ -4275,8 +4123,8 @@ static int cam_icp_mgr_prepare_hw_update(void *hw_mgr_priv,
 		fw_cmd_buf_iova_addr);
 
 	prepare_args->num_hw_update_entries = 1;
-	prepare_args->hw_update_entries[0].addr = (uintptr_t)hfi_cmd;
-	prepare_args->priv = &ctx_data->hfi_frame_process.frame_info[idx];
+	prepare_args->hw_update_entries[0].addr = (uint64_t)hfi_cmd;
+	prepare_args->priv = &ctx_data->hfi_frame_process.request_id[idx];
 
 	CAM_DBG(CAM_ICP, "X: req id = %lld ctx_id = %u",
 		packet->header.request_id, ctx_data->ctx_id);
@@ -4530,7 +4378,6 @@ static int cam_icp_mgr_hw_flush(void *hw_priv, void *hw_flush_args)
 {
 	struct cam_hw_flush_args *flush_args = hw_flush_args;
 	struct cam_icp_hw_ctx_data *ctx_data;
-	struct cam_icp_hw_mgr *hw_mgr = hw_priv;
 
 	if ((!hw_priv) || (!hw_flush_args)) {
 		CAM_ERR(CAM_ICP, "Input params are Null:");
@@ -4641,10 +4488,57 @@ static int cam_icp_mgr_release_hw(void *hw_mgr_priv, void *release_hw_args)
 	}
 	mutex_unlock(&hw_mgr->hw_mgr_mutex);
 
-	if ((!hw_mgr->bps_ctxt_cnt || !hw_mgr->ipe_ctxt_cnt))
+	if (!hw_mgr->bps_ctxt_cnt || !hw_mgr->ipe_ctxt_cnt)
 		cam_icp_device_timer_stop(hw_mgr);
 
-	CAM_DBG(CAM_ICP, "Release done for ctx_id %d", ctx_id);
+	CAM_DBG(CAM_ICP, "Exit");
+	return rc;
+}
+
+static int cam_icp_mgr_send_config_io(struct cam_icp_hw_ctx_data *ctx_data,
+	uint32_t io_buf_addr)
+{
+	int rc = 0;
+	struct hfi_cmd_work_data *task_data;
+	struct hfi_cmd_ipebps_async ioconfig_cmd;
+	unsigned long rem_jiffies;
+	int timeout = 5000;
+	struct crm_workq_task *task;
+
+	task = cam_req_mgr_workq_get_task(icp_hw_mgr.cmd_work);
+	if (!task)
+		return -ENOMEM;
+
+	ioconfig_cmd.size = sizeof(struct hfi_cmd_ipebps_async);
+	ioconfig_cmd.pkt_type = HFI_CMD_IPEBPS_ASYNC_COMMAND_INDIRECT;
+	if (ctx_data->icp_dev_acquire_info->dev_type == CAM_ICP_RES_TYPE_BPS)
+		ioconfig_cmd.opcode = HFI_IPEBPS_CMD_OPCODE_BPS_CONFIG_IO;
+	else
+		ioconfig_cmd.opcode = HFI_IPEBPS_CMD_OPCODE_IPE_CONFIG_IO;
+
+	reinit_completion(&ctx_data->wait_complete);
+	ioconfig_cmd.num_fw_handles = 1;
+	ioconfig_cmd.fw_handles[0] = ctx_data->fw_handle;
+	ioconfig_cmd.payload.indirect = io_buf_addr;
+	ioconfig_cmd.user_data1 = (uint64_t)ctx_data;
+	ioconfig_cmd.user_data2 = (uint64_t)0x0;
+	task_data = (struct hfi_cmd_work_data *)task->payload;
+	task_data->data = (void *)&ioconfig_cmd;
+	task_data->request_id = 0;
+	task_data->type = ICP_WORKQ_TASK_CMD_TYPE;
+	task->process_cb = cam_icp_mgr_process_cmd;
+	rc = cam_req_mgr_workq_enqueue_task(task, &icp_hw_mgr,
+		CRM_TASK_PRIORITY_0);
+	if (rc)
+		return rc;
+
+	rem_jiffies = wait_for_completion_timeout(&ctx_data->wait_complete,
+			msecs_to_jiffies((timeout)));
+	if (!rem_jiffies) {
+		rc = -ETIMEDOUT;
+		CAM_ERR(CAM_ICP, "FW response timed out %d", rc);
+	}
+
 	return rc;
 }
 
@@ -4665,7 +4559,7 @@ static int cam_icp_mgr_create_handle(uint32_t dev_type,
 	create_handle.size = sizeof(struct hfi_cmd_create_handle);
 	create_handle.pkt_type = HFI_CMD_IPEBPS_CREATE_HANDLE;
 	create_handle.handle_type = dev_type;
-	create_handle.user_data1 = PTR_TO_U64(ctx_data);
+	create_handle.user_data1 = (uint64_t)ctx_data;
 	reinit_completion(&ctx_data->wait_complete);
 	task_data = (struct hfi_cmd_work_data *)task->payload;
 	task_data->data = (void *)&create_handle;
@@ -4711,7 +4605,7 @@ static int cam_icp_mgr_send_ping(struct cam_icp_hw_ctx_data *ctx_data)
 
 	ping_pkt.size = sizeof(struct hfi_cmd_ping_pkt);
 	ping_pkt.pkt_type = HFI_CMD_SYS_PING;
-	ping_pkt.user_data = PTR_TO_U64(ctx_data);
+	ping_pkt.user_data = (uint64_t)ctx_data;
 	init_completion(&ctx_data->wait_complete);
 	task_data = (struct hfi_cmd_work_data *)task->payload;
 	task_data->data = (void *)&ping_pkt;
@@ -4870,8 +4764,6 @@ static int cam_icp_mgr_acquire_hw(void *hw_mgr_priv, void *acquire_hw_args)
 
 	icp_dev_acquire_info = ctx_data->icp_dev_acquire_info;
 
-	CAM_DBG(CAM_ICP, "acquire io buf handle %d",
-		icp_dev_acquire_info->io_config_cmd_handle);
 	rc = cam_mem_get_io_buf(
 		icp_dev_acquire_info->io_config_cmd_handle,
 		hw_mgr->iommu_hdl,
@@ -4897,8 +4789,6 @@ static int cam_icp_mgr_acquire_hw(void *hw_mgr_priv, void *acquire_hw_args)
 		if (icp_hw_mgr.a5_debug_type)
 			hfi_set_debug_level(icp_hw_mgr.a5_debug_type,
 				icp_hw_mgr.a5_dbg_lvl);
-
-		hfi_set_fw_dump_level(icp_hw_mgr.a5_fw_dump_lvl);
 
 		rc = cam_icp_send_ubwc_cfg(hw_mgr);
 		if (rc)
@@ -4986,10 +4876,7 @@ static int cam_icp_mgr_acquire_hw(void *hw_mgr_priv, void *acquire_hw_args)
 	cam_icp_ctx_timer_start(ctx_data);
 	hw_mgr->ctxt_cnt++;
 	mutex_unlock(&hw_mgr->hw_mgr_mutex);
-	CAM_DBG(CAM_ICP, "Acquire Done for ctx_id %u dev name %s dev type %d",
-		ctx_data->ctx_id, cam_icp_dev_type_to_name(
-		icp_dev_acquire_info->dev_type),
-		icp_dev_acquire_info->dev_type);
+	CAM_DBG(CAM_ICP, "Acquire Done");
 
 	return 0;
 
@@ -5033,7 +4920,7 @@ static int cam_icp_mgr_get_hw_caps(void *hw_mgr_priv, void *hw_caps_args)
 
 	mutex_lock(&hw_mgr->hw_mgr_mutex);
 	if (copy_from_user(&icp_hw_mgr.icp_caps,
-		u64_to_user_ptr(query_cap->caps_handle),
+		(void __user *)query_cap->caps_handle,
 		sizeof(struct cam_icp_query_cap_cmd))) {
 		CAM_ERR(CAM_ICP, "copy_from_user failed");
 		rc = -EFAULT;
@@ -5047,7 +4934,7 @@ static int cam_icp_mgr_get_hw_caps(void *hw_mgr_priv, void *hw_caps_args)
 	icp_hw_mgr.icp_caps.dev_iommu_handle.non_secure = hw_mgr->iommu_hdl;
 	icp_hw_mgr.icp_caps.dev_iommu_handle.secure = hw_mgr->iommu_sec_hdl;
 
-	if (copy_to_user(u64_to_user_ptr(query_cap->caps_handle),
+	if (copy_to_user((void __user *)query_cap->caps_handle,
 		&icp_hw_mgr.icp_caps, sizeof(struct cam_icp_query_cap_cmd))) {
 		CAM_ERR(CAM_ICP, "copy_to_user failed");
 		rc = -EFAULT;
@@ -5096,8 +4983,8 @@ static int cam_icp_mgr_alloc_devs(struct device_node *of_node)
 		CAM_ERR(CAM_ICP, "read num bps devices failed");
 		goto num_bps_failed;
 	}
-	icp_hw_mgr.devices[CAM_ICP_DEV_BPS] = kcalloc(num_dev,
-		sizeof(struct cam_hw_intf *), GFP_KERNEL);
+	icp_hw_mgr.devices[CAM_ICP_DEV_BPS] = kzalloc(
+		sizeof(struct cam_hw_intf *) * num_dev, GFP_KERNEL);
 	if (!icp_hw_mgr.devices[CAM_ICP_DEV_BPS]) {
 		rc = -ENOMEM;
 		goto num_bps_failed;
@@ -5202,22 +5089,21 @@ static int cam_icp_mgr_create_wq(void)
 	int i;
 
 	rc = cam_req_mgr_workq_create("icp_command_queue", ICP_WORKQ_NUM_TASK,
-		&icp_hw_mgr.cmd_work, CRM_WORKQ_USAGE_NON_IRQ,
-		0);
+		&icp_hw_mgr.cmd_work, CRM_WORKQ_USAGE_NON_IRQ);
 	if (rc) {
 		CAM_ERR(CAM_ICP, "unable to create a command worker");
 		goto cmd_work_failed;
 	}
 
 	rc = cam_req_mgr_workq_create("icp_message_queue", ICP_WORKQ_NUM_TASK,
-		&icp_hw_mgr.msg_work, CRM_WORKQ_USAGE_IRQ, 0);
+		&icp_hw_mgr.msg_work, CRM_WORKQ_USAGE_IRQ);
 	if (rc) {
 		CAM_ERR(CAM_ICP, "unable to create a message worker");
 		goto msg_work_failed;
 	}
 
 	rc = cam_req_mgr_workq_create("icp_timer_queue", ICP_WORKQ_NUM_TASK,
-		&icp_hw_mgr.timer_work, CRM_WORKQ_USAGE_IRQ, 0);
+		&icp_hw_mgr.timer_work, CRM_WORKQ_USAGE_IRQ);
 	if (rc) {
 		CAM_ERR(CAM_ICP, "unable to create a timer worker");
 		goto timer_work_failed;
@@ -5498,9 +5384,6 @@ int cam_icp_hw_mgr_init(struct device_node *of_node, uint64_t *hw_mgr_hdl,
 	rc = cam_icp_mgr_create_wq();
 	if (rc)
 		goto icp_wq_create_failed;
-
-	if (iommu_hdl)
-		*iommu_hdl = icp_hw_mgr.iommu_hdl;
 
 	init_completion(&icp_hw_mgr.a5_complete);
 	return rc;

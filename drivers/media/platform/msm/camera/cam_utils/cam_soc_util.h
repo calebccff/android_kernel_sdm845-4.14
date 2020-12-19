@@ -22,7 +22,6 @@
 #include <linux/spi/spi.h>
 #include <linux/regulator/consumer.h>
 #include <linux/clk/qcom.h>
-#include <linux/debugfs.h>
 
 #include "cam_io_util.h"
 
@@ -61,7 +60,6 @@ enum cam_vote_level {
 	CAM_SVS_VOTE,
 	CAM_SVSL1_VOTE,
 	CAM_NOMINAL_VOTE,
-	CAM_NOMINALL1_VOTE,
 	CAM_TURBO_VOTE,
 	CAM_MAX_VOTE,
 };

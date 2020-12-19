@@ -23,6 +23,7 @@
 #include <linux/uio.h>
 #include <linux/uuid.h>
 #include <linux/file.h>
+#include <linux/string.h>
 
 #include "f2fs.h"
 #include "node.h"
@@ -1708,6 +1709,7 @@ static int f2fs_ioc_start_atomic_write(struct file *filp)
 	f2fs_msg(F2FS_I_SB(inode)->sb, KERN_WARNING,
 		"Unexpected flush for atomic writes: ino=%lu, npages=%u",
 					inode->i_ino, get_dirty_pages(inode));
+	f2fs_find_node_path(inode);//f2fs debug use
 	ret = filemap_write_and_wait_range(inode->i_mapping, 0, LLONG_MAX);
 	if (ret) {
 		clear_inode_flag(inode, FI_ATOMIC_FILE);

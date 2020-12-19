@@ -76,6 +76,46 @@ struct dsi_display *dsi_display_get_main_display(void)
 	return primary_display;
 }
 
+char dsi_display_ascii_to_int(char ascii, int *ascii_err)
+{
+	char int_value;
+
+	if ((ascii >= 48) && (ascii <= 57)) {
+		int_value = ascii - 48;
+	} else if ((ascii >= 65) && (ascii <= 70)) {
+		int_value = ascii - 65 + 10;
+	} else if ((ascii >= 97) && (ascii <= 102)) {
+		int_value = ascii - 97 + 10;
+	} else {
+		int_value = 0;
+		*ascii_err = 1;
+		pr_err("Bad para: %d , please enter the right value!", ascii);
+	}
+
+	return int_value;
+}
+static int dsi_display_get_mipi_dsi_msg(const struct mipi_dsi_msg *msg, char *buf)
+{
+	int len = 0;
+	size_t i;
+	char *tx_buf = (char *)msg->tx_buf;
+	/* Packet Info */
+	len += snprintf(buf + len, PAGE_SIZE - len, "%02X ", msg->type);
+	/* Last bit */
+	len += snprintf(buf + len, PAGE_SIZE - len, "%02X ", (msg->flags & MIPI_DSI_MSG_LASTCOMMAND) ? 1 : 0);
+	len += snprintf(buf + len, PAGE_SIZE - len, "%02X ", msg->channel);
+	len += snprintf(buf + len, PAGE_SIZE - len, "%02X ", (unsigned int)msg->flags);
+	/* Delay */
+	len += snprintf(buf + len, PAGE_SIZE - len, "%02X ", msg->wait_ms);
+	len += snprintf(buf + len, PAGE_SIZE - len, "%02X %02X ", (unsigned int)(msg->tx_len >> 8), (unsigned int)(msg->tx_len & 0x00FF));
+
+	/* Packet Payload */
+	for (i = 0 ; i < msg->tx_len ; i++)
+		len += snprintf(buf + len, PAGE_SIZE - len, "%02X ", tx_buf[i]);
+	len += snprintf(buf + len, PAGE_SIZE - len, "\n");
+
+	return len;
+}
 static void dsi_display_mask_ctrl_error_interrupts(struct dsi_display *display,
 			u32 mask, bool enable)
 {
@@ -217,8 +257,86 @@ int dsi_display_set_backlight(struct drm_connector *connector,
 
 	mutex_lock(&panel->panel_lock);
 	if (!dsi_panel_initialized(panel)) {
+		panel->hbm_backlight = bl_lvl;
+		panel->bl_config.bl_level = bl_lvl;
 		rc = -EINVAL;
 		goto error;
+	}
+
+
+	if (strcmp(dsi_display->panel->name, "samsung s6e3fc2x01 cmd mode dsi panel") == 0){
+	
+			if (bl_lvl != 0 && panel->bl_config.bl_level == 0) {
+				if (panel->naive_display_p3_mode) {
+					pr_err("Send DSI_CMD_SET_NATIVE_DISPLAY_P3_ON cmds\n");
+					rc = dsi_panel_tx_cmd_set(panel, DSI_CMD_SET_NATIVE_DISPLAY_P3_ON);
+				}
+				if (panel->naive_display_wide_color_mode) {
+					pr_err("Send DSI_CMD_SET_NATIVE_DISPLAY_WIDE_COLOR_ON cmds\n");
+					rc = dsi_panel_tx_cmd_set(panel, DSI_CMD_SET_NATIVE_DISPLAY_WIDE_COLOR_ON);
+				}
+				if (panel->naive_display_srgb_color_mode) {
+					pr_err("Send DSI_CMD_SET_NATIVE_DISPLAY_SRGB_COLOR_ON cmds\n");
+					rc = dsi_panel_tx_cmd_set(panel, DSI_CMD_SET_NATIVE_DISPLAY_SRGB_COLOR_ON);
+				}
+	
+				if (panel->naive_display_customer_srgb_mode) {
+					pr_err("Send DSI_CMD_LOADING_CUSTOMER_RGB_ON cmds\n");
+					rc = dsi_panel_tx_cmd_set(panel, DSI_CMD_LOADING_CUSTOMER_RGB_ON);
+				}
+				else {
+					pr_err("Send DSI_CMD_LOADING_CUSTOMER_RGB_OFF cmds\n");
+					rc = dsi_panel_tx_cmd_set(panel, DSI_CMD_LOADING_CUSTOMER_RGB_OFF);
+				}
+	
+				if (panel->naive_display_customer_p3_mode) {
+						pr_err("Send DSI_CMD_LOADING_CUSTOMER_P3_ON cmds\n");
+						rc = dsi_panel_tx_cmd_set(panel, DSI_CMD_LOADING_CUSTOMER_P3_ON);
+				}
+				else {
+						pr_err("Send DSI_CMD_LOADING_CUSTOMER_P3_OFF cmds\n");
+						rc = dsi_panel_tx_cmd_set(panel, DSI_CMD_LOADING_CUSTOMER_P3_OFF);
+				}
+	
+			}
+	
+	}
+	if (strcmp(dsi_display->panel->name, "samsung sofef00_m cmd mode dsi panel") == 0){
+	
+			if (bl_lvl != 0 && panel->bl_config.bl_level == 0) {
+				if (panel->naive_display_p3_mode) {
+					pr_err("Send DSI_CMD_SET_NATIVE_DISPLAY_P3_ON cmds\n");
+					rc = dsi_panel_tx_cmd_set(panel, DSI_CMD_SET_NATIVE_DISPLAY_P3_ON);
+				}
+				if (panel->naive_display_wide_color_mode) {
+					pr_err("Send DSI_CMD_SET_NATIVE_DISPLAY_WIDE_COLOR_ON cmds\n");
+					rc = dsi_panel_tx_cmd_set(panel, DSI_CMD_SET_NATIVE_DISPLAY_WIDE_COLOR_ON);
+				}
+				if (panel->naive_display_srgb_color_mode) {
+					pr_err("Send DSI_CMD_SET_NATIVE_DISPLAY_SRGB_COLOR_ON cmds\n");
+					rc = dsi_panel_tx_cmd_set(panel, DSI_CMD_SET_NATIVE_DISPLAY_SRGB_COLOR_ON);
+				}
+	
+				if (panel->naive_display_customer_srgb_mode) {
+					pr_err("Send DSI_CMD_LOADING_CUSTOMER_RGB_ON cmds\n");
+					rc = dsi_panel_tx_cmd_set(panel, DSI_CMD_LOADING_CUSTOMER_RGB_ON);
+				}
+				else {
+					pr_err("Send DSI_CMD_LOADING_CUSTOMER_RGB_OFF cmds\n");
+					rc = dsi_panel_tx_cmd_set(panel, DSI_CMD_LOADING_CUSTOMER_RGB_OFF);
+				}
+	
+				if (panel->naive_display_customer_p3_mode) {
+						pr_err("Send DSI_CMD_LOADING_CUSTOMER_P3_ON cmds\n");
+						rc = dsi_panel_tx_cmd_set(panel, DSI_CMD_LOADING_CUSTOMER_P3_ON);
+				}
+				else {
+						pr_err("Send DSI_CMD_LOADING_CUSTOMER_P3_OFF cmds\n");
+						rc = dsi_panel_tx_cmd_set(panel, DSI_CMD_LOADING_CUSTOMER_P3_OFF);
+				}
+	
+			}
+	
 	}
 
 	panel->bl_config.bl_level = bl_lvl;
@@ -621,6 +739,15 @@ static bool dsi_display_validate_reg_read(struct dsi_panel *panel)
 
 		if (i == len)
 			return true;
+		if (panel->status_value != 0) {
+			for (i = 0; i < len; ++i) {
+				if (config->return_buf[i] !=
+						panel->status_value)
+					break;
+			}
+			if (i == len)
+				return true;
+		}
 		group += len;
 	}
 
@@ -672,6 +799,8 @@ static int dsi_display_read_status(struct dsi_display_ctrl *ctrl,
 	struct dsi_cmd_desc *cmds;
 	u32 flags = 0;
 
+        int retry_times;
+
 	if (!panel || !ctrl || !ctrl->ctrl)
 		return -EINVAL;
 
@@ -701,6 +830,13 @@ static int dsi_display_read_status(struct dsi_display_ctrl *ctrl,
 		cmds[i].msg.rx_buf = config->status_buf;
 		cmds[i].msg.rx_len = config->status_cmds_rlen[i];
 		rc = dsi_ctrl_cmd_transfer(ctrl->ctrl, &cmds[i].msg, flags);
+		
+		retry_times = 0;
+		do {
+		    rc = dsi_ctrl_cmd_transfer(ctrl->ctrl, &cmds[i].msg, flags);
+		    retry_times++;
+		} while ((rc <= 0) && (retry_times < 3));
+
 		if (rc <= 0) {
 			pr_err("rx cmd transfer failed rc=%d\n", rc);
 			return rc;
@@ -760,11 +896,73 @@ static int dsi_display_status_reg_read(struct dsi_display *display)
 		pr_err("cmd engine enable failed\n");
 		return -EPERM;
 	}
+	mode = display->panel->cur_mode;
+	panel = display->panel;
+	if (strcmp(panel->name, "samsung s6e3fc2x01 cmd mode dsi panel") == 0) {
+		count = mode->priv_info->cmd_sets[
+				DSI_CMD_READ_SAMSUNG_PANEL_REGISTER_ON].count;
+		if (!count) {
+			pr_err("This panel does not read register\n");
+		} else {
 
-	rc = dsi_display_validate_status(m_ctrl, display->panel);
+			rc = dsi_panel_tx_cmd_set_op(panel,
+				DSI_CMD_READ_SAMSUNG_PANEL_REGISTER_ON);
+		}
+		cmds1 = mode->priv_info->cmd_sets[DSI_CMD_SET_PANEL_ID1].cmds;
+		if (cmds1->last_command) {
+			cmds1->msg.flags |= MIPI_DSI_MSG_LASTCOMMAND;
+			flags |= DSI_CTRL_CMD_LAST_COMMAND;
+		}
+		flags |= (DSI_CTRL_CMD_FETCH_MEMORY | DSI_CTRL_CMD_READ);
+		cmds1->msg.rx_buf = buf;
+		cmds1->msg.rx_len = 1;
+		rc = dsi_ctrl_cmd_transfer(m_ctrl->ctrl, &cmds1->msg, flags);
+		if (rc <= 0)
+			pr_err("rx cmd transfer failed rc=%d\n", rc);
+		memcpy(temp_buffer_1, cmds1->msg.rx_buf, 1);
+		count = mode->priv_info->cmd_sets[
+				DSI_CMD_READ_SAMSUNG_PANEL_REGISTER_ON].count;
+		if (!count) {
+			pr_err("This panel does not read register\n");
+		} else {
+			rc = dsi_panel_tx_cmd_set_op(panel,
+				DSI_CMD_READ_SAMSUNG_PANEL_REGISTER_ON);
+		}
+		cmds2 = mode->priv_info->cmd_sets[DSI_CMD_SET_PANEL_ID6].cmds;
+		if (cmds2->last_command) {
+			cmds2->msg.flags |= MIPI_DSI_MSG_LASTCOMMAND;
+			flags |= DSI_CTRL_CMD_LAST_COMMAND;
+		}
+		flags |= (DSI_CTRL_CMD_FETCH_MEMORY | DSI_CTRL_CMD_READ);
+		cmds2->msg.rx_buf = buf;
+		cmds2->msg.rx_len = 2;
+		rc = dsi_ctrl_cmd_transfer(m_ctrl->ctrl, &cmds2->msg, flags);
+		if (rc <= 0)
+			pr_err("rx cmd transfer failed rc=%d\n", rc);
+		memcpy(temp_buffer_2, cmds2->msg.rx_buf, 2);
+		count = mode->priv_info->cmd_sets[
+				DSI_CMD_READ_SAMSUNG_PANEL_REGISTER_OFF].count;
+		if (!count) {
+			pr_err("This panel does not read register\n");
+		} else {
+			rc = dsi_panel_tx_cmd_set_op(panel,
+				DSI_CMD_READ_SAMSUNG_PANEL_REGISTER_OFF);
+		}
+		ESD_TEST1 = temp_buffer_2[0];
+		ESD_TEST2 = temp_buffer_2[1];
+		ESD_TEST3 = temp_buffer_1[0];
+
+		if (((ESD_TEST1 == 132) && (ESD_TEST2 == 0)) ||
+			(ESD_TEST3 != 159))
+			rc = -1;
+		else
+			rc = 1;
+	} else {
+		rc = dsi_display_validate_status(m_ctrl, display->panel);
+	}
 	if (rc <= 0) {
 		pr_err("[%s] read status failed on master,rc=%d\n",
-		       display->name, rc);
+				display->name, rc);
 		goto exit;
 	}
 
@@ -779,7 +977,7 @@ static int dsi_display_status_reg_read(struct dsi_display *display)
 		rc = dsi_display_validate_status(ctrl, display->panel);
 		if (rc <= 0) {
 			pr_err("[%s] read status failed on slave,rc=%d\n",
-			       display->name, rc);
+					display->name, rc);
 			goto exit;
 		}
 	}
@@ -1132,7 +1330,8 @@ int dsi_display_set_power(struct drm_connector *connector,
 {
 	struct dsi_display *display = disp;
 	int rc = 0;
-
+	struct msm_drm_notifier notifier_data;
+	int blank;
 	if (!display || !display->panel) {
 		pr_err("invalid display/panel\n");
 		return -EINVAL;
@@ -2173,6 +2372,25 @@ error:
 			continue;
 		(void)dsi_ctrl_set_power_state(ctrl->ctrl,
 			DSI_CTRL_POWER_VREG_OFF);
+	}
+	if (power_mode == SDE_MODE_DPMS_ON) {
+		blank = MSM_DRM_BLANK_UNBLANK_CUST;
+		notifier_data.data = &blank;
+		notifier_data.id = connector_state_crtc_index;
+		msm_drm_notifier_call_chain(MSM_DRM_EARLY_EVENT_BLANK,
+					    &notifier_data);
+	} else if (power_mode == SDE_MODE_DPMS_LP1) {
+		blank = MSM_DRM_BLANK_NORMAL;
+		notifier_data.data = &blank;
+		notifier_data.id = connector_state_crtc_index;
+		msm_drm_notifier_call_chain(MSM_DRM_EARLY_EVENT_BLANK,
+					    &notifier_data);
+	} else if (power_mode == SDE_MODE_DPMS_OFF) {
+		blank = MSM_DRM_BLANK_POWERDOWN_CUST;
+		notifier_data.data = &blank;
+		notifier_data.id = connector_state_crtc_index;
+		msm_drm_notifier_call_chain(MSM_DRM_EARLY_EVENT_BLANK,
+					    &notifier_data);
 	}
 	return rc;
 }
@@ -5257,6 +5475,18 @@ static int dsi_display_bind(struct device *dev,
 			goto error;
 		}
 	}
+	if (dsi_display_is_te_based_esd(display)) {
+		init_completion(&display->esd_te_gate);
+		if (gpio_is_valid(display->disp_te_gpio)) {
+			rc = gpio_request(display->disp_te_gpio, "te_gpio");
+			if (rc)
+				pr_err("request for te_gpio failed, rc =%d\n",
+					 rc);
+		}
+	}
+	/* register te irq handler */
+	if (dsi_display_is_te_based_esd(display))
+		dsi_display_register_te_irq(display);
 
 	/* register te irq handler */
 	dsi_display_register_te_irq(display);

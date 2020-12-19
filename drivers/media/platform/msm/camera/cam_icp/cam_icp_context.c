@@ -1,4 +1,4 @@
-/* Copyright (c) 2017-2019, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2017-2018, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -241,7 +241,6 @@ static struct cam_ctx_ops
 		},
 		.crm_ops = {},
 		.irq_ops = __cam_icp_handle_buf_done_in_ready,
-		.pagefault_ops = cam_icp_context_dump_active_request,
 	},
 	/* Ready */
 	{
@@ -254,14 +253,12 @@ static struct cam_ctx_ops
 		},
 		.crm_ops = {},
 		.irq_ops = __cam_icp_handle_buf_done_in_ready,
-		.pagefault_ops = cam_icp_context_dump_active_request,
 	},
 	/* Activated */
 	{
 		.ioctl_ops = {},
 		.crm_ops = {},
 		.irq_ops = NULL,
-		.pagefault_ops = cam_icp_context_dump_active_request,
 	},
 };
 

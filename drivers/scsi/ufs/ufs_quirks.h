@@ -198,4 +198,6 @@ struct ufs_dev_fix {
 #define UFS_DEVICE_QUIRK_NO_PURGE		(1 << 24)
 #endif
 
+/* liochen@BSP, 2016/11/30, Add ufs info into *##*37847# */
+int ufs_fill_info(struct ufs_hba *hba);
 #endif /* UFS_QUIRKS_H_ */

@@ -1,4 +1,4 @@
-/* Copyright (c) 2017-2019, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2017, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -34,21 +34,14 @@
 #include "cam_sensor_cmn_header.h"
 #include "cam_soc_util.h"
 #include "cam_debug_util.h"
-#include "cam_sensor_io.h"
-#include "cam_flash_core.h"
-#include "cam_context.h"
 
 #define CAMX_FLASH_DEV_NAME "cam-flash-dev"
 
 #define CAM_FLASH_PIPELINE_DELAY 1
 
-#define FLASH_DRIVER_I2C "i2c_flash"
-
 #define CAM_FLASH_PACKET_OPCODE_INIT                 0
 #define CAM_FLASH_PACKET_OPCODE_SET_OPS              1
 #define CAM_FLASH_PACKET_OPCODE_NON_REALTIME_SET_OPS 2
-
-struct cam_flash_ctrl;
 
 enum cam_flash_switch_trigger_ops {
 	LED_SWITCH_OFF = 0,
@@ -60,12 +53,6 @@ enum cam_flash_state {
 	CAM_FLASH_STATE_ACQUIRE,
 	CAM_FLASH_STATE_CONFIG,
 	CAM_FLASH_STATE_START,
-};
-
-enum cam_flash_flush_type {
-	FLUSH_ALL = 0,
-	FLUSH_REQ,
-	FLUSH_MAX,
 };
 
 /**
@@ -92,10 +79,10 @@ struct cam_flash_intf_params {
  * @cmd_type           : Command buffer type
  */
 struct cam_flash_common_attr {
-	bool      is_settings_valid;
-	uint64_t  request_id;
-	uint16_t  count;
-	uint8_t   cmd_type;
+	bool     is_settings_valid;
+	int32_t  request_id;
+	uint16_t count;
+	uint8_t  cmd_type;
 };
 
 /**
@@ -152,17 +139,8 @@ struct cam_flash_private_soc {
 	bool         is_wled_flash;
 };
 
-struct cam_flash_func_tbl {
-	int (*parser)(struct cam_flash_ctrl *fctrl, void *arg);
-	int (*apply_setting)(struct cam_flash_ctrl *fctrl, uint64_t req_id);
-	int (*power_ops)(struct cam_flash_ctrl *fctrl, bool regulator_enable);
-	int (*flush_req)(struct cam_flash_ctrl *fctrl,
-		enum cam_flash_flush_type type, uint64_t req_id);
-};
-
 /**
  *  struct cam_flash_ctrl
- * @device_name         : Device name
  * @soc_info            : Soc related information
  * @pdev                : Platform device
  * @per_frame[]         : Per_frame setting array

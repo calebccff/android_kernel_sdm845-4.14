@@ -24,6 +24,7 @@
 #include <linux/bio.h>
 #include <linux/blkdev.h>
 #include <linux/quotaops.h>
+#include <linux/list.h>
 #include <crypto/hash.h>
 
 #define __FS_HAS_ENCRYPTION IS_ENABLED(CONFIG_F2FS_FS_ENCRYPTION)

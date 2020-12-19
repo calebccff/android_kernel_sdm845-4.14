@@ -44,6 +44,11 @@
 static inline bool task_fits_max(struct task_struct *p, int cpu);
 #endif /* CONFIG_SMP */
 
+/* Curtis, 20180111, ux realm*/
+#include <../drivers/oneplus/coretech/uxcore/opchain_helper.h>
+
+#define opc_claim_bit_test(claim, cpu) (claim & ((1 << cpu) | (1 << (cpu + num_present_cpus()))))
+
 #ifdef CONFIG_SCHED_WALT
 
 static void walt_fixup_sched_stats_fair(struct rq *rq, struct task_struct *p,
@@ -673,7 +678,6 @@ static struct sched_entity *__pick_next_entity(struct sched_entity *se)
 	return rb_entry(next, struct sched_entity, run_node);
 }
 
-#ifdef CONFIG_SCHED_DEBUG
 struct sched_entity *__pick_last_entity(struct cfs_rq *cfs_rq)
 {
 	struct rb_node *last = rb_last(&cfs_rq->tasks_timeline.rb_root);
@@ -710,7 +714,6 @@ int sched_proc_update_handler(struct ctl_table *table, int write,
 
 	return 0;
 }
-#endif
 
 /*
  * delta /= w
@@ -5270,6 +5273,9 @@ enqueue_task_fair(struct rq *rq, struct task_struct *p, int flags)
 	struct sched_entity *se = &p->se;
 	int task_new = !(flags & ENQUEUE_WAKEUP);
 
+/* Curtis, 20180111, ux realm*/
+	opc_task_switch(true, cpu_of(rq), p, 0);
+
 #ifdef CONFIG_SCHED_WALT
 	p->misfit = !task_fits_max(p, rq->cpu);
 #endif
@@ -5370,6 +5376,8 @@ static void dequeue_task_fair(struct rq *rq, struct task_struct *p, int flags)
 	 */
 	schedtune_dequeue_task(p, cpu_of(rq));
 
+	/* Curtis, 20180111, ux realm*/
+	opc_task_switch(false, cpu_of(rq), p, rq->clock);
 	for_each_sched_entity(se) {
 		cfs_rq = cfs_rq_of(se);
 		dequeue_entity(cfs_rq, se, flags);
@@ -9151,6 +9159,13 @@ int can_migrate_task(struct task_struct *p, struct lb_env *env)
 		return 0;
 #endif
 
+	/* Curtis, 20180111, ux realm*/
+	if (env->flags & LBF_IGNORE_UX_TOP && is_opc_task(p, UT_FORE))
+		return 0;
+
+	if (env->flags & LBF_IGNORE_SLAVE && p->utask_slave)
+		return 0;
+
 	if (task_running(env->src_rq, p)) {
 		schedstat_inc(p->se.statistics.nr_failed_migrations_running);
 		return 0;
@@ -9245,7 +9260,8 @@ static int detach_tasks(struct lb_env *env)
 	unsigned long load = 0;
 	int detached = 0;
 	int orig_loop = env->loop;
-
+	/* Curtis, 20180111, ux realm*/
+	int src_claim = opc_get_claim_on_cpu(env->src_cpu);
 	lockdep_assert_held(&env->src_rq->lock);
 
 	if (env->imbalance <= 0)
@@ -9253,9 +9269,14 @@ static int detach_tasks(struct lb_env *env)
 
 	if (!same_cluster(env->dst_cpu, env->src_cpu))
 		env->flags |= LBF_IGNORE_PREFERRED_CLUSTER_TASKS;
-
-	if (cpu_capacity(env->dst_cpu) < cpu_capacity(env->src_cpu))
+	/* Curtis, 20180111, ux realm*/
+	if (cpu_capacity(env->dst_cpu) < cpu_capacity(env->src_cpu)) {
 		env->flags |= LBF_IGNORE_BIG_TASKS;
+		if (src_claim == 1)
+			env->flags |= LBF_IGNORE_UX_TOP | LBF_IGNORE_SLAVE;
+		else if (src_claim == -1)
+			env->flags |= LBF_IGNORE_SLAVE;
+	}
 
 redo:
 	while (!list_empty(tasks)) {
@@ -9347,6 +9368,9 @@ next:
 		tasks = &env->src_rq->cfs_tasks;
 		env->flags &= ~(LBF_IGNORE_BIG_TASKS |
 				LBF_IGNORE_PREFERRED_CLUSTER_TASKS);
+		if (env->flags & LBF_IGNORE_SLAVE)
+			env->flags &= ~LBF_IGNORE_SLAVE;
+
 		env->loop = orig_loop;
 		goto redo;
 	}
@@ -11084,6 +11108,19 @@ no_move:
 			unsigned long flags;
 
 			raw_spin_lock_irqsave(&busiest->lock, flags);
+
+			/*
+			 * The CPUs are marked as reserved if tasks
+			 * are pushed/pulled from other CPUs. In that case,
+			 * bail out from the load balancer.
+			 */
+			if (is_reserved(this_cpu) ||
+			    is_reserved(cpu_of(busiest))) {
+				raw_spin_unlock_irqrestore(&busiest->lock,
+							   flags);
+				*continue_balancing = 0;
+				goto out;
+			}
 
 			/*
 			 * The CPUs are marked as reserved if tasks

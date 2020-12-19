@@ -22,14 +22,6 @@
 
 #define CAM_CDM_DWORD 4
 
-#define CAM_CDM_SW_CMD_COUNT    2
-#define CAM_CMD_LENGTH_MASK     0xFFFF
-#define CAM_CDM_COMMAND_OFFSET  24
-#define CAM_CDM_REG_OFFSET_MASK 0x00FFFFFF
-
-#define CAM_CDM_DMI_DATA_HI_OFFSET   8
-#define CAM_CDM_DMI_DATA_LO_OFFSET   12
-
 static unsigned int CDMCmdHeaderSizes[
 	CAM_CDM_CMD_PRIVATE_BASE + CAM_CDM_SW_CMD_COUNT] = {
 	0, /* UNUSED*/
@@ -41,7 +33,7 @@ static unsigned int CDMCmdHeaderSizes[
 	2, /* GenerateIRQ*/
 	3, /* WaitForEvent*/
 	1, /* ChangeBase*/
-	1, /* PERF_CONTROL*/
+	1, /* PERF_CONTINUOUSROL*/
 	3, /* DMI32*/
 	3, /* DMI64*/
 };

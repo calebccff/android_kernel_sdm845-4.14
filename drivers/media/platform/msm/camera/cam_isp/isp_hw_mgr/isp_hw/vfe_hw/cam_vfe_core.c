@@ -412,7 +412,7 @@ int cam_vfe_reset(void *hw_priv, void *reset_core_args, uint32_t arg_size)
 
 	reinit_completion(&vfe_hw->hw_complete);
 
-	CAM_DBG(CAM_ISP, "calling RESET on vfe %d", soc_info->index);
+	CAM_INFO(CAM_ISP, "calling RESET on vfe %d", soc_info->index);
 	core_info->vfe_top->hw_ops.reset(core_info->vfe_top->top_priv,
 		reset_core_args, arg_size);
 	CAM_DBG(CAM_ISP, "waiting for vfe reset complete");
@@ -754,6 +754,7 @@ int cam_vfe_process_cmd(void *hw_priv, uint32_t cmd_type,
 	struct cam_vfe_hw_core_info       *core_info = NULL;
 	struct cam_vfe_hw_info            *hw_info = NULL;
 	int rc = 0;
+    struct cam_irq_bh_api              irq_bh_api;
 
 	if (!hw_priv) {
 		CAM_ERR(CAM_ISP, "Invalid arguments");

@@ -16,6 +16,7 @@
 #include "cam_cci_core.h"
 
 #define CCI_MAX_DELAY 1000000
+#define CCI_TIMEOUT msecs_to_jiffies(500)
 
 static struct v4l2_subdev *g_cci_subdev[MAX_CCI];
 
@@ -132,7 +133,7 @@ irqreturn_t cam_cci_irq(int irq_num, void *data)
 			&cci_dev->cci_master_info[MASTER_0].lock_q[QUEUE_0],
 			flags);
 	}
-	if (irq_status0 & CCI_IRQ_STATUS_0_I2C_M0_Q1_REPORT_BMSK) {
+	if (irq & CCI_IRQ_STATUS_0_I2C_M0_Q1_REPORT_BMSK) {
 		struct cam_cci_master_info *cci_master_info;
 
 		cci_master_info = &cci_dev->cci_master_info[MASTER_0];
@@ -188,7 +189,7 @@ irqreturn_t cam_cci_irq(int irq_num, void *data)
 			&cci_dev->cci_master_info[MASTER_1].lock_q[QUEUE_0],
 			flags);
 	}
-	if (irq_status0 & CCI_IRQ_STATUS_0_I2C_M1_Q1_REPORT_BMSK) {
+	if (irq & CCI_IRQ_STATUS_0_I2C_M1_Q1_REPORT_BMSK) {
 		struct cam_cci_master_info *cci_master_info;
 
 		cci_master_info = &cci_dev->cci_master_info[MASTER_1];
@@ -449,6 +450,7 @@ static int cam_cci_platform_probe(struct platform_device *pdev)
 		cpas_parms.client_handle);
 	new_cci_dev->cpas_handle = cpas_parms.client_handle;
 
+	mutex_init(&new_cci_dev->ref_count_mutex);
 	return rc;
 cci_no_resource:
 	kfree(new_cci_dev);
@@ -481,7 +483,6 @@ static struct platform_driver cci_driver = {
 		.name = CAMX_CCI_DEV_NAME,
 		.owner = THIS_MODULE,
 		.of_match_table = cam_cci_dt_match,
-		.suppress_bind_attrs = true,
 	},
 };
 

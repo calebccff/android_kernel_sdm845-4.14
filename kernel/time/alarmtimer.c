@@ -150,6 +150,8 @@ static void alarmtimer_rtc_remove_device(struct device *dev,
 
 static inline void alarmtimer_rtc_timer_init(void)
 {
+	mutex_init(&power_on_alarm_lock);
+
 	rtc_timer_init(&rtctimer, NULL, NULL);
 }
 
@@ -176,7 +178,12 @@ struct rtc_device *alarmtimer_get_rtcdev(void)
 static inline int alarmtimer_rtc_interface_setup(void) { return 0; }
 static inline void alarmtimer_rtc_interface_remove(void) { }
 static inline void alarmtimer_rtc_timer_init(void) { }
+void set_power_on_alarm(void) { }
 #endif
+static void alarm_work_func(struct work_struct *unused)
+{
+	set_power_on_alarm();
+}
 
 /**
  * alarmtimer_enqueue - Adds an alarm timer to an alarm_base timerqueue
@@ -277,6 +284,8 @@ static int alarmtimer_suspend(struct device *dev)
 	struct rtc_device *rtc;
 	unsigned long flags;
 	struct rtc_time tm;
+
+	cancel_delayed_work_sync(&work);
 
 	spin_lock_irqsave(&freezer_delta_lock, flags);
 	min = freezer_delta;
@@ -546,12 +555,14 @@ static void alarmtimer_freezerset(ktime_t absexp, enum alarmtimer_type type)
  * clock2alarm - helper that converts from clockid to alarmtypes
  * @clockid: clockid.
  */
-static enum alarmtimer_type clock2alarm(clockid_t clockid)
+enum alarmtimer_type clock2alarm(clockid_t clockid)
 {
 	if (clockid == CLOCK_REALTIME_ALARM)
 		return ALARM_REALTIME;
 	if (clockid == CLOCK_BOOTTIME_ALARM)
 		return ALARM_BOOTTIME;
+	if (clockid == CLOCK_POWEROFF_ALARM)
+		return ALARM_POWEROFF_REALTIME;
 	return -1;
 }
 

@@ -257,8 +257,6 @@ int cam_soc_util_get_level_from_string(const char *string,
 		*level = CAM_SVSL1_VOTE;
 	} else if (!strcmp(string, "nominal")) {
 		*level = CAM_NOMINAL_VOTE;
-	} else if (!strcmp(string, "nominal_l1")) {
-		*level = CAM_NOMINALL1_VOTE;
 	} else if (!strcmp(string, "turbo")) {
 		*level = CAM_TURBO_VOTE;
 	} else {
@@ -686,7 +684,6 @@ static int cam_soc_util_get_dt_clk_info(struct cam_hw_soc_info *soc_info)
 	int i, j, rc;
 	int32_t num_clk_level_strings;
 	const char *src_clk_str = NULL;
-	const char *clk_control_debugfs = NULL;
 	const char *clk_cntl_lvl_string = NULL;
 	enum cam_vote_level level;
 
@@ -801,7 +798,8 @@ static int cam_soc_util_get_dt_clk_info(struct cam_hw_soc_info *soc_info)
 	if (rc || !src_clk_str) {
 		CAM_DBG(CAM_UTIL, "No src_clk_str found");
 		rc = 0;
-		goto end;
+		/* Bottom loop is dependent on src_clk_str. So return here */
+		return rc;
 	}
 
 	for (i = 0; i < soc_info->num_clk; i++) {
@@ -1529,9 +1527,6 @@ int cam_soc_util_request_platform_resource(
 		goto put_clk;
 	}
 
-	if (soc_info->clk_control_enable)
-		cam_soc_util_create_clk_lvl_debugfs(soc_info);
-
 	return rc;
 
 put_clk:
@@ -1615,9 +1610,6 @@ int cam_soc_util_release_platform_resource(struct cam_hw_soc_info *soc_info)
 
 	/* release for gpio */
 	cam_soc_util_request_gpio_table(soc_info, false);
-
-	if (soc_info->clk_control_enable)
-		cam_soc_util_remove_clk_lvl_debugfs(soc_info);
 
 	return 0;
 }

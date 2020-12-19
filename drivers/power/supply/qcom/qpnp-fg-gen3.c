@@ -25,6 +25,8 @@
 #include <linux/qpnp/qpnp-revid.h>
 #include "fg-core.h"
 #include "fg-reg.h"
+/* david.liu@bsp, 20171023 Battery & Charging porting */
+#include <linux/power/oem_external_fg.h>
 
 #define FG_GEN3_DEV_NAME	"qcom,fg-gen3"
 
@@ -507,6 +509,25 @@ static bool fg_profile_dump;
 module_param_named(
 	profile_dump, fg_profile_dump, bool, 0600
 );
+
+/* david.liu@bsp, 20171023 Battery & Charging porting */
+void external_battery_gauge_register(
+				struct external_battery_gauge *batt_gauge)
+{
+	if (external_fg) {
+		external_fg = batt_gauge;
+		pr_err("multiple battery gauge called\n");
+	} else
+		external_fg = batt_gauge;
+}
+EXPORT_SYMBOL(external_battery_gauge_register);
+
+void external_battery_gauge_unregister(
+				struct external_battery_gauge *batt_gauge)
+{
+	external_fg = NULL;
+}
+EXPORT_SYMBOL(external_battery_gauge_unregister);
 
 static int fg_sram_dump_period_ms = 20000;
 module_param_named(
@@ -4095,6 +4116,26 @@ static int fg_psy_set_property(struct power_supply *psy,
 			return -EINVAL;
 		}
 		break;
+/* david.liu@bsp, 20170303 Add internal FG info */
+	case POWER_SUPPLY_PROP_FG_CAPACITY:
+		rc = fg_get_prop_capacity(chip, &pval->intval);
+		break;
+	case POWER_SUPPLY_PROP_FG_VOLTAGE_NOW:
+		if (chip->battery_missing)
+			pval->intval = 3700000;
+		else
+			rc = fg_get_battery_voltage(chip, &pval->intval);
+		break;
+	case POWER_SUPPLY_PROP_FG_CURRENT_NOW:
+			rc = fg_get_battery_current(chip, &pval->intval);
+		break;
+	case POWER_SUPPLY_PROP_BQ_SOC:
+		if (chip->use_external_fg && external_fg
+			&& external_fg->get_batt_bq_soc)
+			pval->intval = external_fg->get_batt_bq_soc();
+		else
+			pval->intval = 50;
+		break;
 	case POWER_SUPPLY_PROP_CONSTANT_CHARGE_VOLTAGE:
 		rc = fg_set_constant_chg_voltage(fg, pval->intval);
 		break;
@@ -4214,6 +4255,8 @@ static int fg_property_is_writeable(struct power_supply *psy,
 	case POWER_SUPPLY_PROP_COOL_TEMP:
 	case POWER_SUPPLY_PROP_WARM_TEMP:
 	case POWER_SUPPLY_PROP_HOT_TEMP:
+/* david.liu@bsp, 20171023 Battery & Charging porting */
+	case POWER_SUPPLY_PROP_SET_ALLOW_READ_EXTERN_FG_IIC:
 		return 1;
 	default:
 		break;
@@ -4865,7 +4908,6 @@ static struct fg_irq_info fg_irqs[FG_GEN3_IRQ_MAX] = {
 	[MSOC_DELTA_IRQ] = {
 		.name		= "msoc-delta",
 		.handler	= fg_delta_msoc_irq_handler,
-		.wakeable	= true,
 	},
 	[BSOC_DELTA_IRQ] = {
 		.name		= "bsoc-delta",
@@ -4885,7 +4927,6 @@ static struct fg_irq_info fg_irqs[FG_GEN3_IRQ_MAX] = {
 	[BATT_TEMP_DELTA_IRQ] = {
 		.name		= "batt-temp-delta",
 		.handler	= fg_delta_batt_temp_irq_handler,
-		.wakeable	= true,
 	},
 	[BATT_MISSING_IRQ] = {
 		.name		= "batt-missing",
@@ -5229,6 +5270,11 @@ static int fg_parse_dt(struct fg_gen3_chip *chip)
 	else
 		chip->dt.rsense_sel = (u8)temp & SOURCE_SELECT_MASK;
 
+/* david.liu@bsp, 20171023 Battery & Charging porting */
+	chip->use_external_fg =
+	of_property_read_bool(node, "oem,use_external_fg");
+	pr_info("use_external_fg=%d\n", chip->use_external_fg);
+
 	chip->dt.jeita_thresholds[JEITA_COLD] = DEFAULT_BATT_TEMP_COLD;
 	chip->dt.jeita_thresholds[JEITA_COOL] = DEFAULT_BATT_TEMP_COOL;
 	chip->dt.jeita_thresholds[JEITA_WARM] = DEFAULT_BATT_TEMP_WARM;
@@ -5501,6 +5547,32 @@ static struct device_attribute fg_somc_attrs[] = {
 	__ATTR(recharge_voltage_mv, S_IRUGO, fg_somc_param_show, NULL),
 	__ATTR(charge_full, S_IRUGO, fg_somc_param_show, NULL),
 };
+/* david.liu@bsp, 20171023 Battery & Charging porting */
+static void oem_update_cc_cv_setpoint(
+				struct fg_chip *chip, int cv_float_point)
+{
+	/* TODO: write CC_CV_SETPOINT_REG */
+}
+
+static void oneplus_set_allow_read_iic(struct fg_chip *chip,
+				bool status)
+{
+	if (chip->use_external_fg && external_fg
+			&& external_fg->set_allow_reading)
+		external_fg->set_allow_reading(status);
+	else
+		pr_info("set allow read extern fg iic fail\n");
+}
+
+static void oneplus_set_lcd_off_status(struct fg_chip *chip,
+				bool status)
+{
+	if (chip->use_external_fg && external_fg
+			&& external_fg->set_lcd_off_status)
+		external_fg->set_lcd_off_status(status);
+	else
+		pr_info("set lcd off status fail\n");
+}
 
 #define DECIMAL_CELL		100
 #define DECIMAL_MAG		10000LL

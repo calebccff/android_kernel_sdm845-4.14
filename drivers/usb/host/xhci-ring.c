@@ -298,6 +298,11 @@ void xhci_ring_cmd_db(struct xhci_hcd *xhci)
 
 static bool xhci_mod_cmd_timer(struct xhci_hcd *xhci, unsigned long delay)
 {
+/*2018/03/19 handle xiaomi typec headset dsp crash issue*/
+	if ((connected_usb_idVendor == 0x2717) &&
+		(connected_usb_idProduct == 0x3801)) {
+		delay = 500;
+	}
 	return mod_delayed_work(system_wq, &xhci->cmd_timer, delay);
 }
 

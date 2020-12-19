@@ -44,7 +44,7 @@
 struct cam_jpeg_process_frame_work_data_t {
 	uint32_t type;
 	void *data;
-	uintptr_t request_id;
+	uint64_t request_id;
 };
 
 /**
