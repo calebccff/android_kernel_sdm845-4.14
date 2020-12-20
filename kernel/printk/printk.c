@@ -1886,6 +1886,72 @@ int vprintk_store(int facility, int level,
 		}
 	}
 
+
+#ifdef CONFIG_EARLY_PRINTK_DIRECT
+	printascii(text);
+#endif
+
+	if (level == LOGLEVEL_DEFAULT)
+		level = default_message_loglevel;
+
+	if (dict)
+		lflags |= LOG_PREFIX|LOG_NEWLINE;
+
+	return log_output(facility, level, lflags,
+			  dict, dictlen, text, text_len);
+}
+
+asmlinkage int vprintk_emit(int facility, int level,
+			    const char *dict, size_t dictlen,
+			    const char *fmt, va_list args)
+{
+	int printed_len;
+	bool in_sched = false;
+	static char texttmp[LOG_LINE_MAX
+	unsigned long flags;
+	static bool last_new_line = true;
+	static char textbuf[LOG_LINE_MAX];
+	char *text = textbuf;
+	size_t text_len = 0;
+	enum log_flags lflags = 0;
+	int this_cpu;
+	int nmi_message_lost;
+	/* cpu currently holding logbuf_lock in this function */
+	static unsigned int logbuf_cpu = UINT_MAX;
+	u64 ts_sec = local_clock();
+	unsigned long rem_nsec;
+
+	if (level == LOGLEVEL_SCHED) {
+		level = LOGLEVEL_DEFAULT;
+		in_sched = true;
+	}
+
+	boot_delay_msec(level);
+	printk_delay();
+
+	/* This stops the holder of console_sem just where we want him */
+	logbuf_lock_irqsave(flags);
+	printed_len = vprintk_store(facility, level, dict, dictlen, fmt, args);
+	logbuf_unlock_irqrestore(flags);
+
+	/* If called from the scheduler, we can not call up(). */
+	if (!in_sched) {
+		/*
+		 * Disable preemption to avoid being preempted while holding
+		 * console_sem which would prevent anyone from printing to
+		 * console
+		 */
+		preempt_disable();
+		/*
+		 * Try to acquire and then immediately release the console
+		 * semaphore.  The release will print out buffers and wake up
+		 * /dev/kmsg and syslog() users.
+		 */
+		if (console_trylock_spinning())
+			console_unlock();
+		preempt_enable();
+	}
+
 	if (last_new_line) {
 		if (print_wall_time && ts_sec >= 20) {
 			struct timespec64 tspec;
@@ -1923,59 +1989,6 @@ int vprintk_store(int facility, int level,
 	else
 		last_new_line = false;
 
-
-#ifdef CONFIG_EARLY_PRINTK_DIRECT
-	printascii(text);
-#endif
-
-	if (level == LOGLEVEL_DEFAULT)
-		level = default_message_loglevel;
-
-	if (dict)
-		lflags |= LOG_PREFIX|LOG_NEWLINE;
-
-	return log_output(facility, level, lflags,
-			  dict, dictlen, text, text_len);
-}
-
-asmlinkage int vprintk_emit(int facility, int level,
-			    const char *dict, size_t dictlen,
-			    const char *fmt, va_list args)
-{
-	int printed_len;
-	bool in_sched = false;
-	unsigned long flags;
-
-	if (level == LOGLEVEL_SCHED) {
-		level = LOGLEVEL_DEFAULT;
-		in_sched = true;
-	}
-
-	boot_delay_msec(level);
-	printk_delay();
-
-	/* This stops the holder of console_sem just where we want him */
-	logbuf_lock_irqsave(flags);
-	printed_len = vprintk_store(facility, level, dict, dictlen, fmt, args);
-	logbuf_unlock_irqrestore(flags);
-
-	/* If called from the scheduler, we can not call up(). */
-	if (!in_sched) {
-		/*
-		 * Disable preemption to avoid being preempted while holding
-		 * console_sem which would prevent anyone from printing to
-		 * console
-		 */
-		preempt_disable();
-		/*
-		 * Try to acquire and then immediately release the console
-		 * semaphore.  The release will print out buffers and wake up
-		 * /dev/kmsg and syslog() users.
-		 */
-		if (console_trylock_spinning())
-			console_unlock();
-		preempt_enable();
-	}
 
 	return printed_len;
 }
@@ -2634,7 +2647,7 @@ early_param("keep_bootcon", keep_bootcon_setup);
  *  - Once a "real" console is registered, any attempt to register a
  *    bootconsoles will be rejected
  */
-void register_console(struct console *newcon)
+static void register_console(struct console *newcon)
 {
 	int i;
 	unsigned long flags;

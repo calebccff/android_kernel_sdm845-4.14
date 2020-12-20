@@ -22,6 +22,8 @@
 #include <linux/swap_slots.h>
 #include <linux/huge_mm.h>
 
+#include <oneplus/memplus/memplus_helper.h>
+
 #include <asm/pgtable.h>
 #include "internal.h"
 

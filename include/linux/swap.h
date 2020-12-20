@@ -174,6 +174,7 @@ enum {
 	SWP_PAGE_DISCARD = (1 << 9),	/* freed swap page-cluster discards */
 	SWP_STABLE_WRITES = (1 << 10),	/* no overwrite PG_writeback pages */
 	SWP_SYNCHRONOUS_IO = (1 << 11),	/* synchronous IO is efficient */
+	SWP_FAST	= (1 << 11),	/* blkdev access is fast and cheap */ ////// aaaaaaaaaaaaaaaaaaaaa
 					/* add others here before... */
 	SWP_SCANNING	= (1 << 12),	/* refcount in scan_swap_map */
 };

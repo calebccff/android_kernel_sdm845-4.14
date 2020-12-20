@@ -78,6 +78,10 @@
 #include "binder_internal.h"
 #include "binder_trace.h"
 
+// neiltsai, 20161115, add for oemlogkit used
+#include <linux/proc_fs.h>
+// neiltsai end
+
 static HLIST_HEAD(binder_deferred_list);
 static DEFINE_MUTEX(binder_deferred_lock);
 

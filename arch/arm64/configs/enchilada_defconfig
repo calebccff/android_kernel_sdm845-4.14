@@ -708,7 +708,7 @@ CONFIG_QCOM_WDOG_IPI_ENABLE=y
 
 # bin, 2019/6/11/, add for memplus
 CONFIG_MEMPLUS=y
-CONFIG_SMART_BOOST=y
+#CONFIG_SMART_BOOST is not set
 CONFIG_ZRAM=y
 CONFIG_ZRAM_LZ4_COMPRESS=y
 CONFIG_LZ4_DECOMPRESS=y
@@ -720,3 +720,8 @@ CONFIG_ONEPLUS_FG_OPT=y
 # dylanchang, 2019/4/30, enable noop io scheduler
 CONFIG_DEFAULT_NOOP=y
 CONFIG_DEFAULT_IOSCHED="noop"
+
+
+# Fix some memcpy errors caused by this being added in 4.13
+# Should actually fix them instead
+# CONFIG_FORTIFY_SOURCE is not set

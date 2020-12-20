@@ -29,6 +29,7 @@
 #include <linux/semaphore.h>
 #include <linux/time.h>
 #include <linux/types.h>
+#include <linux/pstore_ram.h>
 
 struct module;
 

@@ -85,7 +85,7 @@ PLIST_HEAD(swap_active_head);
  * is held and the locking order requires swap_lock to be taken
  * before any swap_info_struct->lock.
  */
-struct plist_head *swap_avail_heads;
+//struct plist_head *swap_avail_heads;
 DEFINE_SPINLOCK(swap_avail_lock);
 
 struct swap_info_struct *swap_info[MAX_SWAPFILES];
@@ -977,13 +977,6 @@ start_over:
 		spin_unlock(&swap_avail_lock);
 start:
 		spin_lock(&si->lock);
-#ifdef CONFIG_MEMPLUS
-		if (swap_bdv ^ (si->flags & SWP_FAST)) {
-			spin_lock(&swap_avail_lock);
-			spin_unlock(&si->lock);
-			goto nextsi;
-		}
-#endif
 		if (!si->highest_bit || !(si->flags & SWP_WRITEOK)) {
 			spin_lock(&swap_avail_lock);
 			if (plist_node_empty(&si->avail_lists[node])) {
@@ -1038,6 +1031,7 @@ check_out:
 noswap:
 	return n_ret;
 }
+
 /*
 #ifdef CONFIG_MEMPLUS
 bool is_fast_entry(struct page *page)

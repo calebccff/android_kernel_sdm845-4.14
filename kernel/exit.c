@@ -64,6 +64,8 @@
 #include <linux/rcuwait.h>
 #include <linux/compat.h>
 
+#include <linux/adj_chain.h>
+
 #include <linux/uaccess.h>
 #include <asm/unistd.h>
 #include <asm/pgtable.h>

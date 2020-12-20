@@ -544,6 +544,8 @@ struct nameidata {
 	struct inode	*link_inode;
 	unsigned	root_seq;
 	int		dfd;
+	/*Curtis, 2018/04/25 non-exist dcache lookup*/
+	bool	need_nedf;
 } __randomize_layout;
 
 static void set_nameidata(struct nameidata *p, int dfd, struct filename *name)

@@ -246,6 +246,9 @@ enum req_flag_bits {
 	__REQ_URGENT,		/* urgent request */
 	__REQ_NOWAIT,           /* Don't wait if request will block */
 
+	/*dylanchang, 2019/4/30, add foreground task io opt*/
+	__REQ_FG,		/* foreground activity */
+
 	/* Android specific flags */
 	__REQ_NOENCRYPT,	/*
 				 * ok to not encrypt (already encrypted at fs
@@ -269,6 +272,8 @@ enum req_flag_bits {
 #define REQ_PREFLUSH		(1ULL << __REQ_PREFLUSH)
 #define REQ_RAHEAD		(1ULL << __REQ_RAHEAD)
 #define REQ_BACKGROUND		(1ULL << __REQ_BACKGROUND)
+/*dylanchang, 2019/4/30, add foreground task io opt*/
+#define REQ_FG			(1ULL << __REQ_FG)
 #define REQ_NOENCRYPT		(1ULL << __REQ_NOENCRYPT)
 
 #define REQ_NOUNMAP		(1ULL << __REQ_NOUNMAP)
